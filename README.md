@@ -2,7 +2,7 @@
 
 A production-style Go event ingestion and analytics backend — inspired by Segment and PostHog.
 
-[![CI](https://github.com/matangi/eventpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/matangi/eventpulse/actions/workflows/ci.yml)
+[![CI](https://github.com/matanate/eventpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/matanate/eventpulse/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8?logo=go)
 
 Client applications POST events to the ingestion API. Events are validated, rate-limited per API key, and enqueued to Redis Streams. A separate worker service consumes the queue, persists events to PostgreSQL, and updates aggregate counters. An analytics API surfaces the stored data.
