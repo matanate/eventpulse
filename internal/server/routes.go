@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/matangi/eventpulse/internal/analytics"
@@ -22,6 +23,12 @@ func NewRouter(
 ) http.Handler {
 	r := chi.NewRouter()
 
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{"https://*.pages.dev", "https://*.cloudflare.com", "http://localhost:5173"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		MaxAge:         300,
+	}))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
