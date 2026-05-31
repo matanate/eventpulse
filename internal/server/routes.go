@@ -24,7 +24,12 @@ func NewRouter(
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"https://*.pages.dev", "https://*.cloudflare.com", "http://localhost:5173"},
+		AllowedOrigins: []string{
+			"https://*.pages.dev",
+			"https://*.cloudflare.com",
+			"https://eventpulse.atedgimatan.com",
+			"http://localhost:5173",
+		},
 		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders: []string{"Authorization", "Content-Type"},
 		MaxAge:         300,

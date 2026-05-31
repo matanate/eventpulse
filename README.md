@@ -13,6 +13,8 @@ Client applications POST events to the ingestion API. Events are validated, rate
 
 ## Try It Live
 
+**[→ Open live dashboard](https://eventpulse.atedgimatan.com)** — send events and watch them appear in the feed in real time.
+
 The API is live on Railway. Use the demo key below — it's rate-limited to 100 req/min.
 
 ```bash
