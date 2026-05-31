@@ -13,19 +13,23 @@ Client applications POST events to the ingestion API. Events are validated, rate
 
 ## Try It Live
 
-> Live demo coming soon. Run locally with Docker Compose in the meantime — see [Quick Start](#quick-start).
+The API is live on Railway. Use the demo key below — it's rate-limited to 100 req/min.
 
 ```bash
+export DEMO_URL=https://ingestion-api-production-137c.up.railway.app
+export DEMO_KEY=epk_dd66ec26c39427de2e72e4badf89c968
+export PROJECT_ID=06736aa0-911e-483f-8b54-659b16379984
+
 # Ingest an event
-curl -X POST https://<demo-url>/v1/events \
-  -H "Authorization: Bearer <demo-key>" \
+curl -X POST $DEMO_URL/v1/events \
+  -H "Authorization: Bearer $DEMO_KEY" \
   -H "Content-Type: application/json" \
   -d '{"event":"page_viewed","user_id":"user_42","properties":{"page":"/pricing"}}'
 # → 202 {"status":"queued"}
 
 # Query project stats
-curl https://<demo-url>/v1/projects/<project-id>/stats \
-  -H "Authorization: Bearer <demo-key>"
+curl $DEMO_URL/v1/projects/$PROJECT_ID/stats \
+  -H "Authorization: Bearer $DEMO_KEY"
 ```
 
 ---
