@@ -3,7 +3,7 @@ GO     := go
 BIN    := bin
 
 .PHONY: run-api run-worker infra-up infra-down infra-obs migrate migrate-down \
-        test test-integration lint build clean seed loadtest
+        test test-integration lint build clean seed seed-demo loadtest
 
 ## ── Infrastructure ───────────────────────────────────────────────────────────
 
@@ -62,6 +62,12 @@ lint:
 
 seed:
 	$(GO) run ./cmd/seed -count $${SEED_COUNT:-1}
+
+# seed-demo: creates or reuses "Demo Account"/"EventPulse Demo" project and
+# generates 3 fresh API keys for the Railway live showcase. Run once; save output.
+# Requires DATABASE_URL pointing at the Railway Postgres instance.
+seed-demo:
+	$(GO) run ./cmd/seed -demo
 
 ## ── Loadtest ─────────────────────────────────────────────────────────────────
 # Install k6: https://k6.io/docs/getting-started/installation/
