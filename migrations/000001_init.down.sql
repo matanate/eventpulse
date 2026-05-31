@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS dead_letter_events;
+DROP TABLE IF EXISTS daily_event_counts;
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS accounts;
+DROP EXTENSION IF EXISTS "pgcrypto";

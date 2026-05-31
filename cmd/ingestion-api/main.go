@@ -1,0 +1,100 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/matangi/eventpulse/internal/analytics"
+	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matangi/eventpulse/internal/config"
+	"github.com/matangi/eventpulse/internal/db"
+	"github.com/matangi/eventpulse/internal/events"
+	"github.com/matangi/eventpulse/internal/health"
+	"github.com/matangi/eventpulse/internal/queue"
+	rdb "github.com/matangi/eventpulse/internal/redis"
+	"github.com/matangi/eventpulse/internal/ratelimit"
+	"github.com/matangi/eventpulse/internal/server"
+)
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("config error", "err", err)
+		os.Exit(1)
+	}
+
+	setupLogger(cfg)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := db.New(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBMinConns)
+	if err != nil {
+		slog.Error("database connection failed", "err", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	redisClient, err := rdb.New(cfg.RedisURL)
+	if err != nil {
+		slog.Error("redis connection failed", "err", err)
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+
+	authMW := auth.NewMiddleware(pool)
+	limiter := ratelimit.NewLimiter(redisClient, ratelimit.Config{
+		Limit:  100,
+		Window: time.Minute,
+	})
+
+	publisher := queue.NewStreamPublisher(redisClient)
+
+	checker := health.NewChecker(pool, redisClient)
+	eventHandler := events.NewHandler(publisher)
+	analyticsHandler := analytics.NewHandler(pool)
+	router := server.NewRouter(checker, eventHandler, analyticsHandler, authMW, limiter.Middleware())
+	srv := server.New(cfg, router)
+
+	slog.Info("ingestion-api starting", "port", cfg.Port, "env", cfg.Env)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			slog.Info("server stopped", "reason", err)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx, srv); err != nil {
+		slog.Error("shutdown error", "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("shutdown complete")
+}
+
+func setupLogger(cfg *config.Config) {
+	level := slog.LevelInfo
+	if cfg.LogLevel == "debug" {
+		level = slog.LevelDebug
+	}
+
+	var handler slog.Handler
+	opts := &slog.HandlerOptions{Level: level}
+	if cfg.IsDevelopment() {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	}
+
+	slog.SetDefault(slog.New(handler))
+}

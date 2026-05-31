@@ -1,0 +1,35 @@
+# Binaries
+bin/
+*.exe
+
+# Environment
+.env
+.env.local
+
+# Go
+vendor/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Docker volumes
+postgres_data/
+
+# Dashboard (Phase 9)
+web/node_modules/
+web/dist/
+web/.env.local
+
+# Internal / Claude Code files
+CLAUDE.md
+docs/plan.md
+docs/showcase-plan.md

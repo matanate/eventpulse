@@ -1,0 +1,13 @@
+bin/
+coverage.out
+coverage.html
+loadtest/
+docs/
+deploy/grafana/
+.git/
+.github/
+*.md
+Dockerfile*
+.golangci.yml
+.env
+.env.*

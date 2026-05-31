@@ -1,0 +1,37 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/matangi/eventpulse
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+
+issues:
+  exclude-rules:
+    # errcheck is noisy for deferred closes in tests
+    - path: _test\.go
+      linters:
+        - errcheck
+    # seed cmd uses crypto/rand which gosec flags as G404
+    - path: cmd/seed/main\.go
+      linters:
+        - gosec
+
+  # Don't hide the same issue across multiple files
+  max-same-issues: 0
+
+run:
+  timeout: 5m
