@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/matangi/eventpulse/internal/config"
 )
 
 func New(cfg *config.Config, handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.Port),
-		Handler:      handler,
-		ReadTimeout:  cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
+		Addr:              fmt.Sprintf(":%s", cfg.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
 	}
 }
 

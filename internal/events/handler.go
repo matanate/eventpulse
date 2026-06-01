@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -55,8 +56,15 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req ingestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			api.WriteError(w, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "request body must not exceed 1 MiB")
+			return
+		}
 		api.WriteError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "invalid JSON payload")
 		return
 	}
@@ -94,8 +102,15 @@ func (h *Handler) HandleBatchIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req batchIngestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			api.WriteError(w, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "request body must not exceed 1 MiB")
+			return
+		}
 		api.WriteError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "invalid JSON payload")
 		return
 	}
