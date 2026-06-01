@@ -51,7 +51,8 @@ func (e *Event) Validate() []ValidationError {
 
 	if len(e.Properties) > maxPropertiesKeys {
 		errs = append(errs, ValidationError{Field: "properties", Message: "properties must not exceed 50 top-level keys"})
-	} else if len(e.Properties) > 0 {
+	}
+	if len(e.Properties) > 0 {
 		encoded, err := json.Marshal(e.Properties)
 		if err != nil || len(encoded) > maxPropertiesBytes {
 			errs = append(errs, ValidationError{Field: "properties", Message: "properties must not exceed 4 KiB when encoded"})

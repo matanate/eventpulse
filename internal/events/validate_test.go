@@ -152,6 +152,53 @@ func TestValidate(t *testing.T) {
 			},
 			wantCount: 0,
 		},
+		// properties: both violations reported independently (not else-if)
+		{
+			name: "properties 51 keys and oversized both reported",
+			event: events.Event{
+				Event: "test",
+				Properties: func() map[string]any {
+					m := make(map[string]any, 51)
+					for i := range 51 {
+						m[strings.Repeat("k", i+1)] = strings.Repeat("v", 200)
+					}
+					return m
+				}(),
+			},
+			wantCount: 2,
+		},
+		// properties: exactly at 4 KiB boundary
+		{
+			name: "properties at exactly 4096 bytes encoded is valid",
+			event: events.Event{
+				Event: "test",
+				Properties: func() map[string]any {
+					// Build a value that brings the total encoding to ≤ 4096 bytes.
+					// {"k":"<val>"} base is 8 bytes; pad val to fill up to 4096.
+					val := strings.Repeat("x", 4096-len(`{"k":""}`))
+					return map[string]any{"k": val}
+				}(),
+			},
+			wantCount: 0,
+		},
+		// timestamp: exact boundary edge cases
+		{
+			name: "timestamp at exactly -24h boundary is valid",
+			event: events.Event{
+				Event:     "test",
+				Timestamp: time.Now().Add(-24*time.Hour + time.Second),
+			},
+			wantCount: 0,
+		},
+		{
+			name: "timestamp just past -24h is invalid",
+			event: events.Event{
+				Event:     "test",
+				Timestamp: time.Now().Add(-24*time.Hour - time.Second),
+			},
+			wantCount: 1,
+			wantField: "timestamp",
+		},
 	}
 
 	for _, tt := range tests {
