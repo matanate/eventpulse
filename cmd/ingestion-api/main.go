@@ -53,11 +53,13 @@ func main() {
 	})
 
 	publisher := queue.NewStreamPublisher(redisClient)
+	inspector := queue.NewInspector(redisClient)
 
 	checker := health.NewChecker(pool, redisClient)
 	eventHandler := events.NewHandler(publisher, pool)
 	analyticsHandler := analytics.NewHandler(pool)
-	router := server.NewRouter(checker, eventHandler, analyticsHandler, authMW, limiter.Middleware())
+	queueStatsHandler := queue.NewStatsHandler(inspector, pool)
+	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, authMW, limiter.Middleware())
 	srv := server.New(cfg, router)
 
 	slog.Info("ingestion-api starting", "port", cfg.Port, "env", cfg.Env)

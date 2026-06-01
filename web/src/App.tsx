@@ -8,6 +8,7 @@ import { TopEventsChart } from './components/TopEventsChart'
 import { EventDistribution } from './components/EventDistribution'
 import { ActivityTimeline } from './components/ActivityTimeline'
 import { PipelineCard } from './components/PipelineCard'
+import { QueueHealthCard } from './components/QueueHealthCard'
 import { RequestLog, type RequestEntry } from './components/RequestLog'
 import { UserActivity } from './components/UserActivity'
 
@@ -60,8 +61,12 @@ export default function App() {
           </p>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4">
           <PipelineCard isActive={isPipelining} />
+        </div>
+
+        <div className="mb-6">
+          <QueueHealthCard />
         </div>
 
         <ErrorBoundary>

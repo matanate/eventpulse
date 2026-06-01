@@ -79,6 +79,34 @@ curl http://localhost:8080/metrics
 
 ---
 
+## Admin Endpoints
+
+Admin endpoints require authentication but are **not** subject to per-key rate limiting.
+
+### GET /v1/admin/queue/stats
+
+Returns the current queue depth and dead-letter event count.
+
+```bash
+curl http://localhost:8080/v1/admin/queue/stats \
+  -H "Authorization: Bearer epk_..."
+```
+
+```json
+200 OK
+{
+  "pending_messages": 3,
+  "dead_letter_count": 0
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `pending_messages` | integer | Messages delivered to consumers but not yet ACKed |
+| `dead_letter_count` | integer | Events that permanently failed after max retries |
+
+---
+
 ## Ingestion Endpoints
 
 All ingestion endpoints require authentication and are subject to rate limiting.

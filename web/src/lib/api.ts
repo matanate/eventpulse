@@ -169,3 +169,16 @@ export async function getTopEvents(n = 5): Promise<EventCount[]> {
   const data = (await res.json()) as TopEventsResponse
   return data.events
 }
+
+export interface QueueStats {
+  pending_messages: number
+  dead_letter_count: number
+}
+
+export async function getQueueStats(): Promise<QueueStats> {
+  const res = await fetch(`${API_BASE_URL}/v1/admin/queue/stats`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(`queue stats: HTTP ${res.status}`)
+  return res.json() as Promise<QueueStats>
+}
