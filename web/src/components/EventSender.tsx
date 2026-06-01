@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { postEvent, postEventsBatch, type PostEventPayload } from '@/lib/api'
+import { postEvent, postEventsBatch, postEventWithBadKey, type PostEventPayload } from '@/lib/api'
+import { formatEventName } from '@/lib/format'
 import { RateLimitBanner } from './RateLimitBanner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -132,6 +133,22 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     }
   }
 
+  const handleAuthFailureDemo = async () => {
+    if (sending) return
+    setSendingState(true)
+    const start = Date.now()
+    try {
+      const result = await postEventWithBadKey({ event: eventType, user_id: userId })
+      const latencyMs = Date.now() - start
+      onRequest?.({ method: 'POST', path: '/v1/events', status: result.ok ? 202 : (result.status as number), latencyMs })
+    } catch {
+      const latencyMs = Date.now() - start
+      onRequest?.({ method: 'POST', path: '/v1/events', status: 401, latencyMs })
+    } finally {
+      setSendingState(false)
+    }
+  }
+
   const clearRateLimit = useCallback(() => setRateLimitSeconds(0), [])
 
   return (
@@ -168,7 +185,7 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
               >
                 {EVENT_TYPES.map((t: EventType) => (
                   <option key={t} value={t}>
-                    {t}
+                    {formatEventName(t)}
                   </option>
                 ))}
               </select>
@@ -199,6 +216,15 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
             {flash === 'error' && errorMsg && (
               <p className="text-xs text-destructive" role="alert">{errorMsg}</p>
             )}
+
+            <button
+              type="button"
+              onClick={() => { void handleAuthFailureDemo() }}
+              disabled={sending}
+              className="w-full text-center text-[11px] text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 disabled:pointer-events-none"
+            >
+              Demo: try invalid API key →
+            </button>
           </TabsContent>
 
           <TabsContent value="batch" className="space-y-3 mt-4">

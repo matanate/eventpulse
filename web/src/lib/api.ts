@@ -84,6 +84,26 @@ export async function postEvent(payload: PostEventPayload): Promise<PostEventRes
   return { ok: false, status: res.status, message: `HTTP ${res.status}` }
 }
 
+export async function postEventWithBadKey(payload: PostEventPayload): Promise<PostEventResult> {
+  const res = await fetch(`${API_BASE_URL}/v1/events`, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer invalid_key_demo',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (res.status === 202) return { ok: true }
+
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
+    return { ok: false, status: 429, retryAfter }
+  }
+
+  return { ok: false, status: res.status, message: `HTTP ${res.status}` }
+}
+
 export async function postEventsBatch(events: PostEventPayload[]): Promise<PostBatchResult> {
   const res = await fetch(`${API_BASE_URL}/v1/events/batch`, {
     method: 'POST',

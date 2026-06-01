@@ -18,6 +18,11 @@ describe('EventSender — single mode', () => {
     expect(screen.getByRole('tab', { name: /batch/i })).toBeInTheDocument()
   })
 
+  it('renders the auth failure demo link', () => {
+    render(<EventSender />)
+    expect(screen.getByText(/demo: try invalid api key/i)).toBeInTheDocument()
+  })
+
   it('shows success flash after 202 response', async () => {
     render(<EventSender />)
 

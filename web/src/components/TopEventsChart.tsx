@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { usePolledResource } from '@/hooks/usePolledResource'
 import { getTopEvents, type EventCount } from '@/lib/api'
+import { formatEventName } from '@/lib/format'
 import {
   ChartContainer,
   ChartTooltip,
@@ -60,8 +61,9 @@ export function TopEventsChart() {
               <YAxis
                 type="category"
                 dataKey="event"
-                width={130}
-                tick={{ fill: 'var(--color-foreground)', fontSize: 10, fontFamily: 'monospace' }}
+                width={140}
+                tickFormatter={formatEventName}
+                tick={{ fill: 'var(--color-foreground)', fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
               />

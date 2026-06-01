@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePolledResource } from '@/hooks/usePolledResource'
 import { listEvents, type EventRow, type EventsResponse } from '@/lib/api'
+import { formatEventName } from '@/lib/format'
+import { eventColor } from '@/lib/eventColors'
 import { EventFilters } from './EventFilters'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,9 +34,10 @@ function EventItem({ evt, expanded, onToggleExpand, onFilterByUser }: EventItemP
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
           <Badge
             variant="outline"
-            className="font-mono text-[10px] text-primary border-primary/30 bg-primary/5 shrink-0 truncate max-w-[140px]"
+            style={{ color: eventColor(evt.event), borderColor: `${eventColor(evt.event)}40`, backgroundColor: `${eventColor(evt.event)}0d` }}
+            className="font-mono text-[10px] shrink-0 truncate max-w-[140px]"
           >
-            {evt.event}
+            {formatEventName(evt.event)}
           </Badge>
           {evt.user_id && (
             <button

@@ -5,9 +5,19 @@ import { EventSender } from './components/EventSender'
 import { StatsPanel } from './components/StatsPanel'
 import { EventFeed } from './components/EventFeed'
 import { TopEventsChart } from './components/TopEventsChart'
+import { EventDistribution } from './components/EventDistribution'
+import { ActivityTimeline } from './components/ActivityTimeline'
 import { PipelineCard } from './components/PipelineCard'
 import { RequestLog, type RequestEntry } from './components/RequestLog'
 import { UserActivity } from './components/UserActivity'
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/40">
+      {children}
+    </p>
+  )
+}
 
 export default function App() {
   const [requestLog, setRequestLog] = useState<RequestEntry[]>([])
@@ -56,16 +66,28 @@ export default function App() {
 
         <ErrorBoundary>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-2 space-y-5">
-              <EventSender onRequest={logRequest} onSendingChange={setIsPipelining} />
-              <RequestLog entries={requestLog} />
+            {/* Left column — ingestion controls */}
+            <div className="lg:col-span-2 space-y-2">
+              <SectionLabel>Ingestion Controls</SectionLabel>
+              <div className="space-y-5">
+                <EventSender onRequest={logRequest} onSendingChange={setIsPipelining} />
+                <RequestLog entries={requestLog} />
+              </div>
             </div>
 
-            <div className="lg:col-span-3 space-y-5">
-              <StatsPanel />
-              <TopEventsChart />
-              <UserActivity />
-              <EventFeed />
+            {/* Right column — analytics */}
+            <div className="lg:col-span-3 space-y-2">
+              <SectionLabel>Live Analytics</SectionLabel>
+              <div className="space-y-5">
+                <StatsPanel />
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <ActivityTimeline />
+                  <EventDistribution />
+                </div>
+                <TopEventsChart />
+                <UserActivity />
+                <EventFeed />
+              </div>
             </div>
           </div>
         </ErrorBoundary>

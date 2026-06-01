@@ -4,10 +4,14 @@ const BASE = 'http://test.local'
 const PROJECT_ID = 'test-project-id'
 
 export const handlers = [
-  // POST /v1/events → 202
-  http.post(`${BASE}/v1/events`, () =>
-    HttpResponse.json({ status: 'queued' }, { status: 202 }),
-  ),
+  // POST /v1/events → check Authorization header: bad key gets 401, good key gets 202
+  http.post(`${BASE}/v1/events`, ({ request }) => {
+    const auth = request.headers.get('Authorization') ?? ''
+    if (auth === 'Bearer invalid_key_demo') {
+      return HttpResponse.json({ code: 'UNAUTHORIZED', message: 'invalid api key' }, { status: 401 })
+    }
+    return HttpResponse.json({ status: 'queued' }, { status: 202 })
+  }),
 
   // POST /v1/events (rate limited variant — used in overrideHandlers)
   // POST /v1/events/batch → 202

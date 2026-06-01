@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { usePolledResource } from '@/hooks/usePolledResource'
 import { listEvents, listUserEvents, type EventRow, type EventsResponse } from '@/lib/api'
+import { formatEventName } from '@/lib/format'
 
 const POLL_MS = 12_000
 
@@ -107,8 +108,8 @@ export function UserActivity() {
                         key={evt.id}
                         className="flex items-center justify-between gap-2 rounded px-2 py-1 bg-secondary/30"
                       >
-                        <span className="font-mono text-[11px] text-primary/80 truncate">
-                          {evt.event}
+                        <span className="text-[11px] text-primary/80 truncate">
+                          {formatEventName(evt.event)}
                         </span>
                         <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
                           {timeAgo(evt.timestamp)} ago
