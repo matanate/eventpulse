@@ -1,3 +1,5 @@
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { ConnectionBanner } from './components/ConnectionBanner'
 import { EventSender } from './components/EventSender'
 import { StatsPanel } from './components/StatsPanel'
 import { EventFeed } from './components/EventFeed'
@@ -25,6 +27,8 @@ export default function App() {
         </div>
       </header>
 
+      <ConnectionBanner />
+
       <main className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight">Event Analytics</h1>
@@ -34,21 +38,23 @@ export default function App() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-2">
-            <EventSender />
-          </div>
+        <ErrorBoundary>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+            <div className="lg:col-span-2">
+              <EventSender />
+            </div>
 
-          <div className="lg:col-span-3 space-y-5">
-            <StatsPanel />
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-              <TopEventsChart />
-            </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-              <EventFeed />
+            <div className="lg:col-span-3 space-y-5">
+              <StatsPanel />
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+                <TopEventsChart />
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+                <EventFeed />
+              </div>
             </div>
           </div>
-        </div>
+        </ErrorBoundary>
       </main>
 
       <footer className="mt-8 border-t border-zinc-800 px-6 py-4">

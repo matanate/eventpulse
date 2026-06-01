@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import {
   BarChart,
   Bar,
@@ -8,40 +7,28 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts'
+import { usePolledResource } from '../hooks/usePolledResource'
 import { getTopEvents, type EventCount } from '../lib/api'
 
 const POLL_MS = 5_000
 const BAR_COLORS = ['#06b6d4', '#0891b2', '#0e7490', '#155e75', '#164e63']
 
 export function TopEventsChart() {
-  const [data, setData] = useState<EventCount[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const poll = async () => {
-      try {
-        const result = await getTopEvents(5)
-        if (!cancelled) setData(result)
-      } catch {
-        // preserve last known state
-      }
-    }
-
-    poll()
-    const id = setInterval(poll, POLL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [])
+  const { data, status } = usePolledResource<EventCount[]>(getTopEvents, POLL_MS)
 
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-400">
-        Top Events
-      </h2>
-      {data.length === 0 ? (
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          Top Events
+        </h2>
+        {status === 'error' && (
+          <span className="text-xs text-amber-500" role="status" aria-label="stale">
+            stale
+          </span>
+        )}
+      </div>
+      {!data || data.length === 0 ? (
         <p className="py-4 text-center text-xs text-zinc-600">No data yet</p>
       ) : (
         <ResponsiveContainer width="100%" height={180}>

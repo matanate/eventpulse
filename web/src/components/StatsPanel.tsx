@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { usePolledResource } from '../hooks/usePolledResource'
 import { getStats, type StatsResult } from '../lib/api'
 
 const POLL_MS = 3_000
@@ -22,33 +22,20 @@ function StatCard({ label, value }: StatCardProps) {
 }
 
 export function StatsPanel() {
-  const [stats, setStats] = useState<StatsResult | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const poll = async () => {
-      try {
-        const data = await getStats()
-        if (!cancelled) setStats(data)
-      } catch {
-        // preserve last known value
-      }
-    }
-
-    poll()
-    const id = setInterval(poll, POLL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [])
+  const { data: stats, status } = usePolledResource<StatsResult>(getStats, POLL_MS)
 
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-400">
-        Stats
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          Stats
+        </h2>
+        {status === 'error' && (
+          <span className="text-xs text-amber-500" role="status" aria-label="stale">
+            stale
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Total events" value={stats?.total_events ?? '—'} />
         <StatCard label="Today" value={stats?.today_count ?? '—'} />

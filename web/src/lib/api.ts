@@ -38,8 +38,25 @@ export interface PostEventPayload {
   properties?: Record<string, unknown>
 }
 
+export interface ListEventsOptions {
+  limit?: number
+  offset?: number
+  event?: string
+  user_id?: string
+}
+
+export interface BatchResult {
+  count: number
+  status: string
+}
+
 export type PostEventResult =
   | { ok: true }
+  | { ok: false; status: 429; retryAfter: number }
+  | { ok: false; status: number; message: string }
+
+export type PostBatchResult =
+  | { ok: true; count: number }
   | { ok: false; status: 429; retryAfter: number }
   | { ok: false; status: number; message: string }
 
@@ -67,6 +84,26 @@ export async function postEvent(payload: PostEventPayload): Promise<PostEventRes
   return { ok: false, status: res.status, message: `HTTP ${res.status}` }
 }
 
+export async function postEventsBatch(events: PostEventPayload[]): Promise<PostBatchResult> {
+  const res = await fetch(`${API_BASE_URL}/v1/events/batch`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ events }),
+  })
+
+  if (res.status === 202) {
+    const data = (await res.json()) as BatchResult
+    return { ok: true, count: data.count }
+  }
+
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
+    return { ok: false, status: 429, retryAfter }
+  }
+
+  return { ok: false, status: res.status, message: `HTTP ${res.status}` }
+}
+
 export async function getStats(): Promise<StatsResult> {
   const res = await fetch(
     `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/stats`,
@@ -76,12 +113,27 @@ export async function getStats(): Promise<StatsResult> {
   return res.json() as Promise<StatsResult>
 }
 
-export async function listEvents(limit = 20): Promise<EventRow[]> {
+export async function listEvents(options: ListEventsOptions = {}): Promise<EventsResponse> {
+  const { limit = 20, offset = 0, event, user_id } = options
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (event) params.set('event', event)
+  if (user_id) params.set('user_id', user_id)
+
   const res = await fetch(
-    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/events?limit=${limit}`,
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/events?${params.toString()}`,
     { headers: authHeaders() },
   )
   if (!res.ok) throw new Error(`events: HTTP ${res.status}`)
+  return res.json() as Promise<EventsResponse>
+}
+
+export async function listUserEvents(userId: string, limit = 20): Promise<EventRow[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  const res = await fetch(
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/users/${encodeURIComponent(userId)}/events?${params.toString()}`,
+    { headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error(`user events: HTTP ${res.status}`)
   const data = (await res.json()) as EventsResponse
   return data.events
 }
