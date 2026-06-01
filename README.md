@@ -145,6 +145,21 @@ All authenticated endpoints require `Authorization: Bearer epk_...`. See [docs/a
 
 ---
 
+## Security Hardening
+
+Production-grade protections applied to the ingestion API:
+
+| Protection | Detail |
+|---|---|
+| **Slow-loris mitigation** | `ReadHeaderTimeout: 5s` on the HTTP server — slow header attacks time out before consuming a goroutine |
+| **Request body size cap** | `http.MaxBytesReader` limits every ingest request to 1 MiB; oversized payloads return `413 PAYLOAD_TOO_LARGE` |
+| **Properties size cap** | `properties` JSONB field validated to ≤ 50 top-level keys and ≤ 4 KiB encoded; rejects bloated payloads before they hit the DB |
+| **Timestamp bounds** | Event `timestamp` must be within 24 h past / 1 min future; rejects pre-dated or far-future events |
+| **Health endpoint safety** | `/readyz` returns `"unavailable"` for failed dependencies — raw driver error strings never reach the public response; logged server-side via `slog.Warn` |
+| **CORS allowlist** | Exact origin allowlist (`eventpulse.pages.dev`, `eventpulse.atedgimatan.com`, `localhost:5173`) — no wildcard subdomains |
+
+---
+
 ## Local Development
 
 ```bash

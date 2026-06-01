@@ -25,8 +25,7 @@ func NewRouter(
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{
-			"https://*.pages.dev",
-			"https://*.cloudflare.com",
+			"https://eventpulse.pages.dev",
 			"https://eventpulse.atedgimatan.com",
 			"http://localhost:5173",
 		},

@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,14 +28,16 @@ func (c *Checker) Readyz(w http.ResponseWriter, r *http.Request) {
 	allOK := true
 
 	if err := c.db.Ping(context.Background()); err != nil {
-		deps["postgres"] = err.Error()
+		slog.Warn("readyz: postgres unavailable", "err", err)
+		deps["postgres"] = "unavailable"
 		allOK = false
 	} else {
 		deps["postgres"] = "ok"
 	}
 
 	if err := c.redis.Ping(context.Background()).Err(); err != nil {
-		deps["redis"] = err.Error()
+		slog.Warn("readyz: redis unavailable", "err", err)
+		deps["redis"] = "unavailable"
 		allOK = false
 	} else {
 		deps["redis"] = "ok"
