@@ -54,10 +54,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Metrics server — exposes /metrics for Prometheus scraping.
+	// HTTP server — exposes /metrics for Prometheus and /healthz for Railway health checks.
+	// Uses PORT env var (Railway convention) if set, otherwise falls back to METRICS_PORT.
+	httpPort := os.Getenv("PORT")
+	if httpPort == "" {
+		httpPort = strconv.Itoa(cfg.MetricsPort)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	metricsSrv := &http.Server{
-		Addr:    ":" + strconv.Itoa(cfg.MetricsPort),
-		Handler: promhttp.Handler(),
+		Addr:    ":" + httpPort,
+		Handler: mux,
 	}
 	go func() {
 		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

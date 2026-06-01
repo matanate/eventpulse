@@ -55,7 +55,7 @@ func main() {
 	publisher := queue.NewStreamPublisher(redisClient)
 
 	checker := health.NewChecker(pool, redisClient)
-	eventHandler := events.NewHandler(publisher)
+	eventHandler := events.NewHandler(publisher, pool)
 	analyticsHandler := analytics.NewHandler(pool)
 	router := server.NewRouter(checker, eventHandler, analyticsHandler, authMW, limiter.Middleware())
 	srv := server.New(cfg, router)

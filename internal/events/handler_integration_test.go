@@ -33,7 +33,7 @@ func (f *fakePublisher) PublishBatch(_ context.Context, evts []*events.Event) er
 const testProjectID = "test-project-id"
 
 func newTestServer(pub events.Publisher) *httptest.Server {
-	h := events.NewHandler(pub)
+	h := events.NewHandler(pub, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

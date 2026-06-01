@@ -3,22 +3,28 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/matangi/eventpulse/internal/api"
 	"github.com/matangi/eventpulse/internal/auth"
 	"github.com/matangi/eventpulse/internal/telemetry"
 )
 
 type Handler struct {
-	pub Publisher
+	pub  Publisher
+	pool *pgxpool.Pool // optional: if set, events are written directly to DB for immediate feed visibility
 }
 
-func NewHandler(pub Publisher) *Handler {
-	return &Handler{pub: pub}
+// NewHandler creates an event handler. Pass a non-nil pool to enable direct
+// Postgres writes alongside queue publishing (makes events appear immediately
+// in analytics queries without waiting for the worker).
+func NewHandler(pub Publisher, pool *pgxpool.Pool) *Handler {
+	return &Handler{pub: pub, pool: pool}
 }
 
 type ingestRequest struct {
@@ -67,6 +73,14 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		telemetry.EventsIngestedTotal.WithLabelValues("error").Inc()
 		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
+	}
+
+	// Direct write for immediate feed visibility; non-fatal if it fails.
+	// ON CONFLICT DO NOTHING in Store() ensures no duplicates when the worker later processes the queue entry.
+	if h.pool != nil {
+		if err := Store(r.Context(), h.pool, e); err != nil {
+			slog.Warn("handler: direct store failed", "err", err, "event_id", e.ID)
+		}
 	}
 
 	telemetry.EventsIngestedTotal.WithLabelValues("success").Inc()
@@ -119,6 +133,13 @@ func (h *Handler) HandleBatchIngest(w http.ResponseWriter, r *http.Request) {
 		telemetry.EventsIngestedTotal.WithLabelValues("error").Add(float64(len(evts)))
 		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
+	}
+
+	// Direct write for immediate feed visibility; non-fatal if it fails.
+	if h.pool != nil {
+		if err := BatchStore(r.Context(), h.pool, evts); err != nil {
+			slog.Warn("handler: direct batch store failed", "err", err, "count", len(evts))
+		}
 	}
 
 	telemetry.EventsIngestedTotal.WithLabelValues("success").Add(float64(len(evts)))
