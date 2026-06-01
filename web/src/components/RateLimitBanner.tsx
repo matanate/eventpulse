@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Progress } from '@/components/ui/progress'
 
 interface Props {
   retryAfter: number
@@ -27,24 +29,20 @@ export function RateLimitBanner({ retryAfter, onExpire }: Props) {
 
   if (remaining <= 0) return null
 
-  const progress = remaining / retryAfter
+  const progress = Math.round((remaining / retryAfter) * 100)
 
   return (
-    <div
-      role="status"
-      aria-label={`Rate limited. Resets in ${remaining} seconds.`}
-      className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-amber-400">Rate limit reached</span>
-        <span className="tabular-nums text-amber-300/70 text-xs">{remaining}s</span>
-      </div>
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-amber-500/20">
-        <div
-          className="h-full origin-left rounded-full bg-amber-400 transition-transform duration-1000 ease-linear"
-          style={{ transform: `scaleX(${progress})` }}
+    <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-400">
+      <AlertDescription className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-amber-400">Rate limit reached</span>
+          <span className="tabular-nums text-amber-300/70 text-xs">{remaining}s</span>
+        </div>
+        <Progress
+          value={progress}
+          className="h-1 bg-amber-500/20 [&>div]:bg-amber-400"
         />
-      </div>
-    </div>
+      </AlertDescription>
+    </Alert>
   )
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/server'
 import { EventSender } from './EventSender'
@@ -13,8 +14,8 @@ describe('EventSender — single mode', () => {
   it('renders the send button and mode tabs', () => {
     render(<EventSender />)
     expect(screen.getByRole('button', { name: /send event/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /single/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /batch/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /single/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /batch/i })).toBeInTheDocument()
   })
 
   it('shows success flash after 202 response', async () => {
@@ -64,10 +65,11 @@ describe('EventSender — single mode', () => {
   })
 })
 
+// Radix Tabs uses pointerDown internally — use userEvent for tab switching
 describe('EventSender — batch mode', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     render(<EventSender />)
-    fireEvent.click(screen.getByRole('button', { name: /batch/i }))
+    await userEvent.click(screen.getByRole('tab', { name: /batch/i }))
   })
 
   it('shows batch send button and size options', () => {

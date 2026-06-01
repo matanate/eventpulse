@@ -25,7 +25,7 @@ beforeEach(() => {
 describe('StatsPanel', () => {
   it('shows dashes when no data yet', () => {
     render(<StatsPanel />)
-    expect(screen.getAllByText('—')).toHaveLength(2)
+    expect(screen.getAllByText('—')).toHaveLength(3)
   })
 
   it('displays total_events and today_count when data is available', () => {

@@ -14,8 +14,7 @@ describe('RateLimitBanner', () => {
 
   it('renders progress bar', () => {
     render(<RateLimitBanner retryAfter={30} onExpire={() => {}} />)
-    const el = document.querySelector('[style*="scaleX"]')
-    expect(el).toBeTruthy()
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
   })
 
   it('counts down each second', async () => {
@@ -40,7 +39,6 @@ describe('RateLimitBanner', () => {
   })
 
   it('shows fresh countdown when remounted with a new retryAfter (key-reset pattern)', () => {
-    // Callers pass key={retryAfter} so the component remounts on new rate-limit windows
     const { unmount } = render(<RateLimitBanner retryAfter={10} onExpire={() => {}} />)
     expect(screen.getByText('10s')).toBeInTheDocument()
 
