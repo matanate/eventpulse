@@ -43,6 +43,7 @@ export interface ListEventsOptions {
   offset?: number
   event?: string
   user_id?: string
+  from?: string // ISO 8601 timestamp — filter events at or after this time
 }
 
 export interface BatchResult {
@@ -134,10 +135,11 @@ export async function getStats(): Promise<StatsResult> {
 }
 
 export async function listEvents(options: ListEventsOptions = {}): Promise<EventsResponse> {
-  const { limit = 20, offset = 0, event, user_id } = options
+  const { limit = 20, offset = 0, event, user_id, from } = options
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
   if (event) params.set('event', event)
   if (user_id) params.set('user_id', user_id)
+  if (from) params.set('from', from)
 
   const res = await fetch(
     `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/events?${params.toString()}`,

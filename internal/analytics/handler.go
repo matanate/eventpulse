@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultLimit = 50
-	maxLimit     = 100
+	maxLimit     = 1000
 	defaultN     = 10
 	maxN         = 50
 )
@@ -157,15 +157,18 @@ func queryInt(r *http.Request, key string, def, max int) int {
 	return n
 }
 
-// queryDate parses a YYYY-MM-DD query param. Returns zero time if missing or invalid.
+// queryDate parses a time query param. Accepts RFC3339 timestamps or YYYY-MM-DD dates.
+// Returns zero time if missing or unparseable.
 func queryDate(r *http.Request, key string) time.Time {
 	s := r.URL.Query().Get(key)
 	if s == "" {
 		return time.Time{}
 	}
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return time.Time{}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC()
 	}
-	return t.UTC()
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.UTC()
+	}
+	return time.Time{}
 }

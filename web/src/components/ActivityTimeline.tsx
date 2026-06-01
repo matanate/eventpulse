@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 const POLL_MS = 5_000
 const BUCKET_MINUTES = 5
 const BUCKET_COUNT = 12
+const WINDOW_MS = BUCKET_COUNT * BUCKET_MINUTES * 60_000 // 1 hour
 
 const chartConfig = {
   count: { label: 'Events', color: 'var(--color-chart-1)' },
@@ -73,7 +74,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
 export function ActivityTimeline() {
   const { data, status } = usePolledResource<EventsResponse>(
-    () => listEvents({ limit: 200 }),
+    () => listEvents({ limit: 1000, from: new Date(Date.now() - WINDOW_MS).toISOString() }),
     POLL_MS,
   )
 
