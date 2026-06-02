@@ -119,6 +119,10 @@ func (w *Worker) handleMessage(ctx context.Context, msg queue.Message) {
 		slog.Warn("worker: upsert daily count", "err", err, "project_id", e.ProjectID, "event", e.Event)
 	}
 
+	if err := events.UpsertDailyActiveUser(ctx, w.pool, e.ProjectID, e.UserID, e.Timestamp); err != nil {
+		slog.Warn("worker: upsert daily active user", "err", err, "project_id", e.ProjectID)
+	}
+
 	if err := w.consumer.Ack(ctx, msg.ID); err != nil {
 		slog.Error("worker: ack message", "err", err, "msg_id", msg.ID)
 	}

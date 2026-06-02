@@ -43,6 +43,24 @@ func UpsertDailyCount(ctx context.Context, pool *pgxpool.Pool, projectID, event 
 	return nil
 }
 
+// UpsertDailyActiveUser records that userID was active on the given date.
+// Anonymous events (empty userID) are skipped. A failure here is non-fatal.
+func UpsertDailyActiveUser(ctx context.Context, pool *pgxpool.Pool, projectID, userID string, date time.Time) error {
+	if userID == "" {
+		return nil
+	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO daily_active_users (project_id, date, user_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING`,
+		projectID, date.UTC().Truncate(24*time.Hour), userID,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert daily active user: %w", err)
+	}
+	return nil
+}
+
 func BatchStore(ctx context.Context, pool *pgxpool.Pool, events []*Event) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {

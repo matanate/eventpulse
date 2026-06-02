@@ -224,6 +224,34 @@ export async function postFunnel(steps: string[], windowPeriod: string): Promise
   return res.json() as Promise<FunnelResult>
 }
 
+export interface RetentionBucket {
+  offset: number
+  count: number
+  rate: number
+}
+
+export interface RetentionRow {
+  cohort_date: string
+  cohort_size: number
+  buckets: RetentionBucket[]
+}
+
+export interface RetentionResult {
+  period: string
+  cohorts: number
+  rows: RetentionRow[]
+}
+
+export async function getRetention(period = 'day', cohorts = 8): Promise<RetentionResult> {
+  const params = new URLSearchParams({ period, cohorts: String(cohorts) })
+  const res = await fetch(
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/retention?${params.toString()}`,
+    { headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error(`retention: HTTP ${res.status}`)
+  return res.json() as Promise<RetentionResult>
+}
+
 export async function getQueueStats(): Promise<QueueStats> {
   const res = await fetch(`${API_BASE_URL}/v1/admin/queue/stats`, {
     headers: authHeaders(),
