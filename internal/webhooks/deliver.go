@@ -91,7 +91,7 @@ func (c *Client) Deliver(ctx context.Context, d DeliveryWithSub) DeliveryResult 
 	if err != nil {
 		return DeliveryResult{Err: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBody)) //nolint:errcheck
 
 	return DeliveryResult{

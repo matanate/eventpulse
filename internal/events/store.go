@@ -85,7 +85,7 @@ func BatchStore(ctx context.Context, pool *pgxpool.Pool, events []*Event) error 
 	results := tx.SendBatch(ctx, batch)
 	for range events {
 		if _, err := results.Exec(); err != nil {
-			results.Close()
+			results.Close() //nolint:errcheck
 			return fmt.Errorf("batch insert: %w", err)
 		}
 	}
