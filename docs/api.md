@@ -115,6 +115,13 @@ All ingestion endpoints require authentication and are subject to rate limiting.
 
 Ingest a single event. Returns `202 Accepted` immediately — the event is enqueued for asynchronous storage.
 
+**Request headers**
+
+| Header | Required | Description |
+|---|---|---|
+| `Authorization` | Yes | `Bearer epk_...` API key |
+| `Idempotency-Key` | No | UUID v4 — deduplicate retried requests (takes precedence over body field) |
+
 **Request body**
 
 | Field | Type | Required | Description |
@@ -122,8 +129,12 @@ Ingest a single event. Returns `202 Accepted` immediately — the event is enque
 | `event` | string | Yes | Event name (max 255 chars) |
 | `user_id` | string | No | User identifier (max 255 chars) |
 | `properties` | object | No | Arbitrary key-value metadata |
-| `idempotency_key` | string | No | Deduplicate re-submitted events (max 255 chars) |
+| `idempotency_key` | string | No | UUID v4 — deduplicate re-submitted events (header takes precedence) |
 | `timestamp` | ISO 8601 string | No | Event time; defaults to server receive time |
+
+**Idempotency**
+
+Supply `Idempotency-Key: <UUID v4>` (or the `idempotency_key` body field) to enable safe retries. If two requests arrive with the same key for the same project within 24 hours, the second is accepted with `202` but produces no duplicate event. The dedup window is bounded by the project scope — keys are not globally unique across projects.
 
 **Response**
 

@@ -25,10 +25,26 @@ func TestValidate(t *testing.T) {
 			event: events.Event{
 				Event:          "page_view",
 				UserID:         "usr_123",
-				IdempotencyKey: "key_abc",
+				IdempotencyKey: "550e8400-e29b-41d4-a716-446655440000",
 				Properties:     map[string]any{"page": "/home"},
 			},
 			wantCount: 0,
+		},
+		{
+			name:      "valid UUID idempotency_key",
+			event:     events.Event{Event: "test", IdempotencyKey: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"},
+			wantCount: 0,
+		},
+		{
+			name:      "empty idempotency_key is valid",
+			event:     events.Event{Event: "test", IdempotencyKey: ""},
+			wantCount: 0,
+		},
+		{
+			name:      "idempotency_key not a valid UUID",
+			event:     events.Event{Event: "test", IdempotencyKey: "not-a-uuid"},
+			wantCount: 1,
+			wantField: "idempotency_key",
 		},
 		{
 			name:      "empty event name",
@@ -55,7 +71,7 @@ func TestValidate(t *testing.T) {
 			wantField: "user_id",
 		},
 		{
-			name:      "idempotency_key too long",
+			name:      "idempotency_key long non-UUID string",
 			event:     events.Event{Event: "test", IdempotencyKey: strings.Repeat("k", 256)},
 			wantCount: 1,
 			wantField: "idempotency_key",

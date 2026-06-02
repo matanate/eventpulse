@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { postEvent, postEventsBatch, postEventWithBadKey, type PostEventPayload } from '@/lib/api'
+import { postEvent, postEventsBatch, postEventWithBadKey, postEventDuplicate, type PostEventPayload } from '@/lib/api'
 import { formatEventName } from '@/lib/format'
 import { RateLimitBanner } from './RateLimitBanner'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ const EVENT_TYPES = [
 ] as const
 
 type EventType = (typeof EVENT_TYPES)[number]
-type FlashState = 'success' | 'error' | null
+type FlashState = 'success' | 'error' | 'idempotent' | null
 
 const BATCH_COUNTS = [10, 25, 50, 100] as const
 
@@ -133,6 +133,30 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     }
   }
 
+  const handleDuplicateDemo = async () => {
+    if (sending) return
+    setSendingState(true)
+    setFlash(null)
+    const start = Date.now()
+    try {
+      const { first, second } = await postEventDuplicate({ event: eventType, user_id: userId })
+      const latencyMs = Date.now() - start
+      const firstStatus = first.ok ? 202 : (first.status as number)
+      const secondStatus = second.ok ? 202 : (second.status as number)
+      onRequest?.({ method: 'POST', path: '/v1/events (×1)', status: firstStatus, latencyMs })
+      onRequest?.({ method: 'POST', path: '/v1/events (×2 dup)', status: secondStatus, latencyMs: 0 })
+      if (first.ok && second.ok) {
+        setFlash('idempotent')
+        setTimeout(() => setFlash(null), 3_000)
+      }
+    } catch {
+      const latencyMs = Date.now() - start
+      onRequest?.({ method: 'POST', path: '/v1/events', status: 0, latencyMs })
+    } finally {
+      setSendingState(false)
+    }
+  }
+
   const handleAuthFailureDemo = async () => {
     if (sending) return
     setSendingState(true)
@@ -210,21 +234,36 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
               variant={flash === 'error' ? 'destructive' : 'default'}
               className="w-full"
             >
-              {sending ? 'Sending…' : flash === 'success' ? '✓ Sent' : 'Send Event'}
+              {sending ? 'Sending…' : flash === 'success' ? '✓ Sent' : flash === 'idempotent' ? '✓ Sent (×2)' : 'Send Event'}
             </Button>
 
             {flash === 'error' && errorMsg && (
               <p className="text-xs text-destructive" role="alert">{errorMsg}</p>
             )}
+            {flash === 'idempotent' && (
+              <p className="text-xs text-emerald-400" role="status">
+                2× accepted · 1 unique event (idempotency proof)
+              </p>
+            )}
 
-            <button
-              type="button"
-              onClick={() => { void handleAuthFailureDemo() }}
-              disabled={sending}
-              className="w-full text-center text-[11px] text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 disabled:pointer-events-none"
-            >
-              Demo: try invalid API key →
-            </button>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => { void handleDuplicateDemo() }}
+                disabled={sending}
+                className="w-full text-center text-[11px] text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 disabled:pointer-events-none"
+              >
+                Demo: send duplicate (idempotency) →
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleAuthFailureDemo() }}
+                disabled={sending}
+                className="w-full text-center text-[11px] text-muted-foreground/40 transition-colors hover:text-muted-foreground/70 disabled:pointer-events-none"
+              >
+                Demo: try invalid API key →
+              </button>
+            </div>
           </TabsContent>
 
           <TabsContent value="batch" className="space-y-3 mt-4">
