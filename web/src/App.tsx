@@ -11,6 +11,7 @@ import { PipelineCard } from './components/PipelineCard'
 import { QueueHealthCard } from './components/QueueHealthCard'
 import { RequestLog, type RequestEntry } from './components/RequestLog'
 import { UserActivity } from './components/UserActivity'
+import { FunnelChart } from './components/FunnelChart'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -98,6 +99,7 @@ export default function App() {
                   <EventDistribution />
                 </div>
                 <TopEventsChart />
+                <FunnelChart />
                 <UserActivity />
                 <EventFeed />
               </div>
