@@ -84,4 +84,17 @@ export const handlers = [
       offset: 0,
     }),
   ),
+
+  // POST /v1/projects/:id/funnels
+  http.post(`${BASE}/v1/projects/${PROJECT_ID}/funnels`, () =>
+    HttpResponse.json({
+      steps: [
+        { event: 'page_viewed',       entered: 120, converted: 72, dropped: 48, conversion_rate: 0.6 },
+        { event: 'button_clicked',    entered: 72,  converted: 31, dropped: 41, conversion_rate: 0.431 },
+        { event: 'checkout_completed',entered: 31,  converted: 0,  dropped: 0,  conversion_rate: 0 },
+      ],
+      window: 'P7D',
+      overall_conversion_rate: 0.258,
+    }),
+  ),
 ]
