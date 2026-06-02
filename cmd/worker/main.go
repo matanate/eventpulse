@@ -116,6 +116,7 @@ func main() {
 		HTTPTimeout:  cfg.WebhookHTTPTimeout,
 		MinInterval:  cfg.WebhookMinInterval,
 		AllowHTTP:    cfg.IsDevelopment(),
+		SecretKey:    cfg.WebhookSecretKey,
 	}
 	dispatcher := webhooks.NewDispatcher(pool, dispatcherCfg)
 	go dispatcher.Run(ctx)

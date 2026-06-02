@@ -21,6 +21,7 @@ type Dispatcher struct {
 	batchSize    int
 	claimWindow  time.Duration
 	minInterval  time.Duration
+	secretKey    []byte // AES-256 key for decrypting secrets at delivery time
 	limiter      *subLimiter
 }
 
@@ -31,6 +32,7 @@ type DispatcherConfig struct {
 	HTTPTimeout  time.Duration
 	MinInterval  time.Duration // minimum time between delivery attempts per subscription
 	AllowHTTP    bool
+	SecretKey    []byte // AES-256 key for decrypting webhook secrets at delivery time
 }
 
 // NewDispatcher creates a Dispatcher with the given pool and config.
@@ -46,6 +48,7 @@ func NewDispatcher(pool *pgxpool.Pool, cfg DispatcherConfig) *Dispatcher {
 		batchSize:    cfg.BatchSize,
 		claimWindow:  claimWindow,
 		minInterval:  cfg.MinInterval,
+		secretKey:    cfg.SecretKey,
 		limiter:      &subLimiter{},
 	}
 }
@@ -91,6 +94,21 @@ func (d *Dispatcher) attempt(ctx context.Context, del DeliveryWithSub) {
 		slog.Info("dispatcher: rate-limited, skipping", "sub_id", del.SubscriptionID, "delivery_id", del.ID)
 		return
 	}
+
+	// Decrypt the HMAC signing secret stored encrypted in the database.
+	plainSecret, err := DecryptSecret(del.Secret, d.secretKey)
+	if err != nil {
+		slog.Error("dispatcher: decrypt secret", "err", err, "sub_id", del.SubscriptionID)
+		errMsg := "secret decryption failed"
+		if del.Attempts+1 >= MaxAttempts {
+			_ = RescheduleOrFail(ctx, d.pool, del.ID, del.Attempts+1, errMsg, time.Now(), true)
+		} else {
+			_ = RescheduleOrFail(ctx, d.pool, del.ID, del.Attempts+1, errMsg,
+				time.Now().Add(nextBackoff(del.Attempts+1)), false)
+		}
+		return
+	}
+	del.Secret = string(plainSecret)
 
 	start := time.Now()
 	result := d.client.Deliver(ctx, del)

@@ -9,8 +9,7 @@ import (
 )
 
 // CreateSubscription inserts a new webhook subscription and returns the created row.
-// The secret is stored as plaintext in this portfolio implementation. In a
-// production system, encrypt it with AES-GCM before writing and decrypt after reading.
+// secret must already be AES-256-GCM encrypted (via EncryptSecret) before calling.
 func CreateSubscription(ctx context.Context, pool *pgxpool.Pool, projectID, rawURL, secret string, filterEvent *string) (Subscription, error) {
 	var s Subscription
 	err := pool.QueryRow(ctx, `

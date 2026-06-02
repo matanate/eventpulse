@@ -3,6 +3,7 @@
 package webhooks_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,8 @@ import (
 var (
 	testPool      *pgxpool.Pool
 	testProjectID string
+	// Fixed 32-byte AES-256 key for integration tests.
+	testSecretKey = bytes.Repeat([]byte("t"), 32)
 )
 
 func TestMain(m *testing.M) {
@@ -78,7 +81,7 @@ func run(m *testing.M) int {
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 func TestWebhookHandler_CreateAndList(t *testing.T) {
-	handler := webhooks.NewHandler(testPool, true)
+	handler := newTestHandler()
 	srv := newTestServer(handler)
 	defer srv.Close()
 
@@ -123,7 +126,7 @@ func TestWebhookHandler_CreateAndList(t *testing.T) {
 }
 
 func TestWebhookHandler_CreateValidation(t *testing.T) {
-	handler := webhooks.NewHandler(testPool, false) // https-only
+	handler := webhooks.NewHandler(testPool, false, testSecretKey) // https-only
 	srv := newTestServer(handler)
 	defer srv.Close()
 
@@ -149,7 +152,7 @@ func TestWebhookHandler_CreateValidation(t *testing.T) {
 }
 
 func TestWebhookHandler_Delete(t *testing.T) {
-	handler := webhooks.NewHandler(testPool, true)
+	handler := newTestHandler()
 	srv := newTestServer(handler)
 	defer srv.Close()
 
@@ -181,7 +184,7 @@ func TestWebhookHandler_Delete(t *testing.T) {
 
 func TestWebhookHandler_Delete_IDOR(t *testing.T) {
 	// Create a subscription under testProjectID.
-	handler := webhooks.NewHandler(testPool, true)
+	handler := newTestHandler()
 	srv := newTestServer(handler)
 	defer srv.Close()
 
@@ -211,12 +214,12 @@ func TestWebhookHandler_Delete_IDOR(t *testing.T) {
 }
 
 func TestWebhookHandler_Unauthenticated(t *testing.T) {
-	handler := webhooks.NewHandler(testPool, true)
+	h := newTestHandler()
 
 	r := chi.NewRouter()
-	r.Post("/v1/webhooks", handler.HandleCreate)
-	r.Get("/v1/webhooks", handler.HandleList)
-	r.Delete("/v1/webhooks/{id}", handler.HandleDelete)
+	r.Post("/v1/webhooks", h.HandleCreate)
+	r.Get("/v1/webhooks", h.HandleList)
+	r.Delete("/v1/webhooks/{id}", h.HandleDelete)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
@@ -295,6 +298,10 @@ func TestEnqueueDeliveries_FilterEvent(t *testing.T) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+func newTestHandler() *webhooks.Handler {
+	return webhooks.NewHandler(testPool, true, testSecretKey)
+}
 
 func newTestServer(h *webhooks.Handler) *httptest.Server {
 	return newTestServerForProject(h, testProjectID)
