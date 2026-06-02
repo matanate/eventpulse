@@ -12,6 +12,7 @@ import { QueueHealthCard } from './components/QueueHealthCard'
 import { RequestLog, type RequestEntry } from './components/RequestLog'
 import { UserActivity } from './components/UserActivity'
 import { FunnelChart } from './components/FunnelChart'
+import { RetentionGrid } from './components/RetentionGrid'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -100,6 +101,7 @@ export default function App() {
                 </div>
                 <TopEventsChart />
                 <FunnelChart />
+                <RetentionGrid />
                 <UserActivity />
                 <EventFeed />
               </div>
