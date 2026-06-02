@@ -23,11 +23,13 @@ const (
 type Handler struct {
 	pool      *pgxpool.Pool
 	allowHTTP bool
+	secretKey []byte // AES-256 key for at-rest secret encryption
 }
 
 // NewHandler creates a Handler. allowHTTP must only be true in development.
-func NewHandler(pool *pgxpool.Pool, allowHTTP bool) *Handler {
-	return &Handler{pool: pool, allowHTTP: allowHTTP}
+// secretKey must be exactly 32 bytes (AES-256).
+func NewHandler(pool *pgxpool.Pool, allowHTTP bool, secretKey []byte) *Handler {
+	return &Handler{pool: pool, allowHTTP: allowHTTP, secretKey: secretKey}
 }
 
 // subscriptionResponse is the public DTO — secret is intentionally absent.
@@ -94,7 +96,13 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sub, err := CreateSubscription(r.Context(), h.pool, projectID, req.URL, req.Secret, req.FilterEvent)
+	encryptedSecret, err := EncryptSecret([]byte(req.Secret), h.secretKey)
+	if err != nil {
+		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+
+	sub, err := CreateSubscription(r.Context(), h.pool, projectID, req.URL, encryptedSecret, req.FilterEvent)
 	if err != nil {
 		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return

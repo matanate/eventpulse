@@ -76,7 +76,7 @@ func main() {
 	eventHandler := events.NewHandler(publisher, pool)
 	analyticsHandler := analytics.NewHandler(pool)
 	queueStatsHandler := queue.NewStatsHandler(inspector, pool)
-	webhookHandler := webhooks.NewHandler(pool, cfg.IsDevelopment())
+	webhookHandler := webhooks.NewHandler(pool, cfg.IsDevelopment(), cfg.WebhookSecretKey)
 	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, webhookHandler, authMW, limiter.Middleware())
 	// otelhttp is always installed; with the no-op provider it is a thin pass-through.
 	// This ensures incoming traceparent headers create a root span even when no

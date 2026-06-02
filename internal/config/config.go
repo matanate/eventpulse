@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -28,6 +29,7 @@ type Config struct {
 	WebhookBatchSize    int
 	WebhookHTTPTimeout  time.Duration
 	WebhookMinInterval  time.Duration // minimum delay between delivery attempts per subscription
+	WebhookSecretKey    []byte        // 32-byte AES-256 key for at-rest secret encryption (required)
 }
 
 func Load() (*Config, error) {
@@ -52,12 +54,20 @@ func Load() (*Config, error) {
 		WebhookMinInterval:  getDuration("WEBHOOK_MIN_INTERVAL", time.Second),
 	}
 
+	webhookKey, keyErr := hex.DecodeString(os.Getenv("WEBHOOK_SECRET_KEY"))
+	if keyErr == nil && len(webhookKey) == 32 {
+		cfg.WebhookSecretKey = webhookKey
+	}
+
 	var missing []string
 	if cfg.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
 	}
 	if cfg.RedisURL == "" {
 		missing = append(missing, "REDIS_URL")
+	}
+	if len(cfg.WebhookSecretKey) != 32 {
+		missing = append(missing, "WEBHOOK_SECRET_KEY (must be 64 hex chars, generate with: openssl rand -hex 32)")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))

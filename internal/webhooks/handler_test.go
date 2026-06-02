@@ -10,7 +10,7 @@ import (
 // Tests for validation-only paths that don't require a database.
 
 func TestHandleCreate_MissingAuth(t *testing.T) {
-	h := &Handler{pool: nil, allowHTTP: true}
+	h := NewHandler(nil, true, testKey)
 	r := httptest.NewRequest(http.MethodPost, "/v1/webhooks", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 	h.HandleCreate(w, r)
@@ -20,7 +20,7 @@ func TestHandleCreate_MissingAuth(t *testing.T) {
 }
 
 func TestHandleList_MissingAuth(t *testing.T) {
-	h := &Handler{pool: nil, allowHTTP: true}
+	h := NewHandler(nil, true, testKey)
 	r := httptest.NewRequest(http.MethodGet, "/v1/webhooks", nil)
 	w := httptest.NewRecorder()
 	h.HandleList(w, r)
@@ -30,7 +30,7 @@ func TestHandleList_MissingAuth(t *testing.T) {
 }
 
 func TestHandleDelete_MissingAuth(t *testing.T) {
-	h := &Handler{pool: nil, allowHTTP: true}
+	h := NewHandler(nil, true, testKey)
 	r := httptest.NewRequest(http.MethodDelete, "/v1/webhooks/some-id", nil)
 	w := httptest.NewRecorder()
 	h.HandleDelete(w, r)
