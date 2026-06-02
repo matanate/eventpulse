@@ -32,8 +32,11 @@ func NewStreamConsumerWithStream(rdb *redis.Client, consumerName, streamName str
 
 // ensureGroup creates the consumer group if it does not exist.
 // MKSTREAM creates the stream itself if it also does not exist.
+// "0" starts from the beginning of the stream so a fresh consumer group
+// processes any backlog rather than silently skipping it ("$" would
+// start at the tail and lose all messages published before the group existed).
 func (c *StreamConsumer) ensureGroup(ctx context.Context) error {
-	err := c.rdb.XGroupCreateMkStream(ctx, c.streamName, ConsumerGroup, "$").Err()
+	err := c.rdb.XGroupCreateMkStream(ctx, c.streamName, ConsumerGroup, "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return fmt.Errorf("create consumer group: %w", err)
 	}
