@@ -46,7 +46,6 @@ func NewRouter(
 	r.Get("/readyz", checker.Readyz)
 	r.Handle("/metrics", promhttp.Handler())
 	r.Get("/openapi.json", docs.HandleSpec)
-	r.Get("/docs", docs.HandleUI)
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(authMW)

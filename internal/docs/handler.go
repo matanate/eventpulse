@@ -34,27 +34,3 @@ func HandleSpec(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(specJSON)
 }
 
-// scalarHTML embeds the Scalar API reference UI via CDN.
-// Version is pinned to the @1 major range; upgrade by bumping the tag and
-// regenerating the SRI hash (sha384) at https://www.srihash.org/.
-const scalarHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>EventPulse API Reference</title>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-</head>
-<body>
-  <script
-    id="api-reference"
-    data-url="/openapi.json"
-    crossorigin="anonymous"
-    src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1"></script>
-</body>
-</html>`
-
-// HandleUI serves the Scalar interactive API reference.
-func HandleUI(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(scalarHTML))
-}
