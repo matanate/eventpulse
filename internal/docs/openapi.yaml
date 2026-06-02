@@ -276,6 +276,64 @@ components:
           description: Fraction of step-1 users who completed the final step
           example: 0.258
 
+    RetentionBucket:
+      type: object
+      required: [offset, count, rate]
+      properties:
+        offset:
+          type: integer
+          description: Days after the cohort date (0 = cohort day itself)
+          example: 1
+        count:
+          type: integer
+          description: Users from the cohort who were active on cohort_date + offset
+          example: 68
+        rate:
+          type: number
+          format: float
+          description: count / cohort_size
+          example: 0.45
+
+    RetentionRow:
+      type: object
+      required: [cohort_date, cohort_size, buckets]
+      properties:
+        cohort_date:
+          type: string
+          format: date
+          description: The first day users in this cohort were seen (YYYY-MM-DD)
+          example: "2026-05-25"
+        cohort_size:
+          type: integer
+          description: Unique users first seen on cohort_date within the observation window
+          example: 150
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetentionBucket"
+          description: |
+            Retention data for each day relative to cohort_date. The array is
+            triangular: recent cohorts have fewer buckets because future days
+            have not yet elapsed.
+
+    RetentionResponse:
+      type: object
+      required: [period, cohorts, rows]
+      properties:
+        period:
+          type: string
+          description: Granularity of the cohort grouping (currently only "day")
+          example: day
+        cohorts:
+          type: integer
+          description: Number of cohort periods in the response
+          example: 8
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetentionRow"
+          description: Cohort rows ordered newest-first (most recent cohort at index 0)
+
 paths:
   /healthz:
     get:
@@ -733,6 +791,91 @@ paths:
                 $ref: "#/components/schemas/FunnelResponse"
         "400":
           description: Invalid request (bad JSON, invalid steps, unsupported window)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Project ID does not match the authenticated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/retention:
+    get:
+      tags: [analytics]
+      summary: Cohort retention analysis
+      description: |
+        Returns a triangular cohort-retention matrix for the project.
+
+        Users are grouped into cohorts by the **first day** they appear in the
+        `daily_active_users` rollup within the observation window
+        `[today - (cohorts - 1) days, today]`. For each cohort, the response
+        shows how many of those users returned on each subsequent day.
+
+        The matrix is **triangular**: the most recent cohort has only a D+0
+        bucket (cohort day itself), the second-most-recent has D+0 and D+1, and
+        so on. The `buckets` array for each row contains only the days that have
+        already elapsed — no placeholder entries for future periods.
+
+        **Anonymous events** (null `user_id`) do not contribute to cohort sizes
+        or retention counts.
+
+        **Current limitation**: `period=day` is the only supported granularity.
+      operationId: getRetention
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day]
+            default: day
+          description: Cohort grouping granularity. Only "day" is supported.
+        - name: cohorts
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+            default: 8
+          description: Number of cohort periods to include in the response
+      responses:
+        "200":
+          description: Triangular cohort-retention matrix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionResponse"
+              example:
+                period: day
+                cohorts: 4
+                rows:
+                  - cohort_date: "2026-05-31"
+                    cohort_size: 1
+                    buckets:
+                      - { offset: 0, count: 1, rate: 1.0 }
+                  - cohort_date: "2026-05-30"
+                    cohort_size: 150
+                    buckets:
+                      - { offset: 0, count: 150, rate: 1.0 }
+                      - { offset: 1, count: 68,  rate: 0.45 }
+        "400":
+          description: Invalid period or cohorts value
           content:
             application/json:
               schema:
