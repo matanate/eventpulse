@@ -57,11 +57,14 @@ p99 > 200ms typically indicates Redis saturation or a slow DB connection pool �
 
 ## Error Budget
 
-| Window | Allowed downtime | Allowed p99 violations |
-|--------|-----------------|----------------------|
-| 1 hour | 3.6 seconds | 1.8 minutes |
-| 24 hours | 1.44 minutes | 43.2 minutes |
-| 30 days | 43.8 minutes | 8.7 hours |
+| Window | Allowed downtime (availability SLO) | Allowed 5-min windows above p99 target |
+|--------|-------------------------------------|----------------------------------------|
+| 1 hour | 3.6 seconds | 1 window (≤ 5 min) |
+| 24 hours | 1.44 minutes | 14 windows (≤ 70 min) |
+| 30 days | 43.8 minutes | 432 windows (≤ 36 hours) |
+
+> Latency columns count 5-minute scrape windows where p99 > 200ms, not wall-clock minutes. A single bad minute counts as one full window.
+
 
 ---
 

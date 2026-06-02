@@ -31,6 +31,8 @@ func collectDBPool(pool *pgxpool.Pool) {
 	s := pool.Stat()
 	DBPoolAcquiredConnections.Set(float64(s.AcquiredConns()))
 	DBPoolIdleConnections.Set(float64(s.IdleConns()))
+	// EmptyAcquireCount and AcquireDuration are cumulative since pool creation.
+	// Use increase() or irate() in Grafana/PromQL to derive per-interval rates.
 	DBPoolWaitCount.Set(float64(s.EmptyAcquireCount()))
 	DBPoolWaitDurationSeconds.Set(s.AcquireDuration().Seconds())
 }
@@ -54,7 +56,8 @@ func StartRedisPoolCollector(ctx context.Context, rdb *redis.Client) {
 
 func collectRedisPool(rdb *redis.Client) {
 	s := rdb.PoolStats()
-	// TotalConns - IdleConns gives the number of connections in active use.
+	// TotalConns and IdleConns can diverge briefly between internal pool updates,
+	// so clamp to zero rather than emitting a negative active count.
 	active := int32(s.TotalConns) - int32(s.IdleConns)
 	if active < 0 {
 		active = 0

@@ -54,4 +54,4 @@ groups:
           severity: warning
         annotations:
           summary: "Rate-limiter circuit breaker is open"
-          description: "The rate-limiter circuit breaker has been open for more than 1 minute. Redis may be unavailable. Requests are being {{ if eq (rate_limiter_circuit_breaker_state) 2.0 }}allowed through (fail-open){{ else }}rejected (fail-closed){{ end }}."
+          description: "The rate-limiter circuit breaker has been open for more than 1 minute (state={{ $value }}). Redis may be unavailable. Check GET /readyz and the Redis service. Depending on FailMode config, requests may be rejected (FailClosed) or allowed through unthrottled (FailOpen)."

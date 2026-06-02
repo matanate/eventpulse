@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -15,9 +16,10 @@ type fakeRedis struct {
 
 // We can't inject fakeRedis through the public API because Limiter holds a
 // concrete *redis.Client. Instead we test the circuit breaker directly and
-// test Allow() via the exported Limiter using a real Redis (integration) or
-// we factor the script runner behind an interface. For now, unit-test the
-// circuit breaker in isolation and the FailMode semantics via a thin wrapper.
+// test FailMode semantics via the internalLimiter wrapper below.
+// NOTE: FailMode behavior in the production Limiter.Allow is NOT directly
+// covered by these unit tests — only the internalLimiter proxy is exercised.
+// Integration tests against a real Redis would be needed for full coverage.
 
 // ─── Circuit breaker unit tests ───────────────────────────────────────────────
 
@@ -167,7 +169,7 @@ func (l *internalLimiter) allow(ctx context.Context, keyID string) (bool, time.D
 }
 
 func formatMS(n int64) string {
-	return string(rune('0' + n%10)) // placeholder, not used in logic
+	return strconv.FormatInt(n, 10)
 }
 
 func TestFailClosed_ReturnsErrorOnRedisFailure(t *testing.T) {
