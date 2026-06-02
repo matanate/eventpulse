@@ -142,10 +142,20 @@ func (w *Worker) deadLetter(ctx context.Context, msg queue.Message, reason error
 		raw = escaped
 	}
 
+	// Best-effort: extract project_id from the payload for scoped monitoring queries.
+	// Left NULL when the payload is not parseable (format errors).
+	var projectID *string
+	var hdr struct {
+		ProjectID string `json:"project_id"`
+	}
+	if json.Unmarshal(msg.Payload, &hdr) == nil && hdr.ProjectID != "" {
+		projectID = &hdr.ProjectID
+	}
+
 	_, dbErr := w.pool.Exec(ctx,
-		`INSERT INTO dead_letter_events (raw_payload, error, attempt_count)
-		 VALUES ($1, $2, $3)`,
-		raw, reason.Error(), msg.DeliveryCount,
+		`INSERT INTO dead_letter_events (project_id, raw_payload, error, attempt_count)
+		 VALUES ($1, $2, $3, $4)`,
+		projectID, raw, reason.Error(), msg.DeliveryCount,
 	)
 	if dbErr != nil {
 		slog.Error("worker: insert dead letter", "err", dbErr, "msg_id", msg.ID)
