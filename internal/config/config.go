@@ -54,11 +54,6 @@ func Load() (*Config, error) {
 		WebhookMinInterval:  getDuration("WEBHOOK_MIN_INTERVAL", time.Second),
 	}
 
-	webhookKey, keyErr := hex.DecodeString(os.Getenv("WEBHOOK_SECRET_KEY"))
-	if keyErr == nil && len(webhookKey) == 32 {
-		cfg.WebhookSecretKey = webhookKey
-	}
-
 	var missing []string
 	if cfg.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
@@ -66,12 +61,24 @@ func Load() (*Config, error) {
 	if cfg.RedisURL == "" {
 		missing = append(missing, "REDIS_URL")
 	}
-	if len(cfg.WebhookSecretKey) != 32 {
-		missing = append(missing, "WEBHOOK_SECRET_KEY (must be 64 hex chars, generate with: openssl rand -hex 32)")
-	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
+
+	// WEBHOOK_SECRET_KEY is validated separately to give a precise error rather
+	// than conflating "missing" with "malformed".
+	rawKey := os.Getenv("WEBHOOK_SECRET_KEY")
+	if rawKey == "" {
+		return nil, fmt.Errorf("missing required environment variable: WEBHOOK_SECRET_KEY (generate with: openssl rand -hex 32)")
+	}
+	webhookKey, keyErr := hex.DecodeString(rawKey)
+	if keyErr != nil {
+		return nil, fmt.Errorf("WEBHOOK_SECRET_KEY is not valid hex: %w", keyErr)
+	}
+	if len(webhookKey) != 32 {
+		return nil, fmt.Errorf("WEBHOOK_SECRET_KEY must decode to exactly 32 bytes (got %d); generate with: openssl rand -hex 32", len(webhookKey))
+	}
+	cfg.WebhookSecretKey = webhookKey
 
 	return cfg, nil
 }

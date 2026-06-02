@@ -36,7 +36,11 @@ type DispatcherConfig struct {
 }
 
 // NewDispatcher creates a Dispatcher with the given pool and config.
+// cfg.SecretKey must be exactly 32 bytes (AES-256); panics otherwise.
 func NewDispatcher(pool *pgxpool.Pool, cfg DispatcherConfig) *Dispatcher {
+	if len(cfg.SecretKey) != 32 {
+		panic("webhooks.NewDispatcher: SecretKey must be exactly 32 bytes")
+	}
 	client := NewClient(cfg.HTTPTimeout, cfg.AllowHTTP)
 	// claimWindow gives enough time for an HTTP delivery plus a buffer before a
 	// claimed row is considered abandoned and becomes reclaimable.
@@ -108,6 +112,12 @@ func (d *Dispatcher) attempt(ctx context.Context, del DeliveryWithSub) {
 		}
 		return
 	}
+	// Zero the plaintext slice after use to limit the window of exposure in heap memory.
+	defer func() {
+		for i := range plainSecret {
+			plainSecret[i] = 0
+		}
+	}()
 	del.Secret = string(plainSecret)
 
 	start := time.Now()
