@@ -60,7 +60,11 @@ func main() {
 		slog.Error("redis connection failed", "err", err)
 		os.Exit(1)
 	}
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			slog.Error("redis close error", "err", err)
+		}
+	}()
 
 	consumerName := consumerID()
 	consumer, err := queue.NewStreamConsumer(redisClient, consumerName)

@@ -35,7 +35,15 @@ func Migrate(databaseURL string) error {
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
-	defer m.Close()
+	defer func() {
+		srcErr, dbErr := m.Close()
+		if srcErr != nil {
+			slog.Warn("migration source close", "err", srcErr)
+		}
+		if dbErr != nil {
+			slog.Warn("migration db close", "err", dbErr)
+		}
+	}()
 
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
