@@ -27,8 +27,11 @@ type Handler struct {
 }
 
 // NewHandler creates a Handler. allowHTTP must only be true in development.
-// secretKey must be exactly 32 bytes (AES-256).
+// secretKey must be exactly 32 bytes (AES-256); panics otherwise.
 func NewHandler(pool *pgxpool.Pool, allowHTTP bool, secretKey []byte) *Handler {
+	if len(secretKey) != 32 {
+		panic("webhooks.NewHandler: secretKey must be exactly 32 bytes")
+	}
 	return &Handler{pool: pool, allowHTTP: allowHTTP, secretKey: secretKey}
 }
 

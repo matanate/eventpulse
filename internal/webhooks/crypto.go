@@ -30,8 +30,15 @@ func EncryptSecret(plaintext, key []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(sealed), nil
 }
 
+// maxEncodedLen is an upper bound on base64(nonce + maxSecretLen + GCM tag).
+// nonce=12, maxSecret=256, tag=16 → 284 raw bytes → 380 base64 chars (with padding).
+const maxEncodedLen = 512
+
 // DecryptSecret reverses EncryptSecret. Returns the original plaintext.
 func DecryptSecret(encoded string, key []byte) ([]byte, error) {
+	if len(encoded) > maxEncodedLen {
+		return nil, errors.New("encoded secret exceeds maximum length")
+	}
 	blob, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("base64 decode: %w", err)
