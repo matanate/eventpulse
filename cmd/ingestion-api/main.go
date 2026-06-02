@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/matangi/eventpulse/internal/analytics"
 	"github.com/matangi/eventpulse/internal/auth"
 	"github.com/matangi/eventpulse/internal/config"
@@ -18,6 +20,7 @@ import (
 	rdb "github.com/matangi/eventpulse/internal/redis"
 	"github.com/matangi/eventpulse/internal/ratelimit"
 	"github.com/matangi/eventpulse/internal/server"
+	"github.com/matangi/eventpulse/internal/tracing"
 )
 
 func main() {
@@ -31,6 +34,19 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	tracingShutdown, err := tracing.Setup(ctx, "ingestion-api", cfg.OTELEndpoint)
+	if err != nil {
+		slog.Error("tracing setup failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tracingShutdown(shutdownCtx); err != nil {
+			slog.Error("tracing shutdown error", "err", err)
+		}
+	}()
 
 	pool, err := db.New(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBMinConns)
 	if err != nil {
@@ -60,7 +76,11 @@ func main() {
 	analyticsHandler := analytics.NewHandler(pool)
 	queueStatsHandler := queue.NewStatsHandler(inspector, pool)
 	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, authMW, limiter.Middleware())
-	srv := server.New(cfg, router)
+	// otelhttp is always installed; with the no-op provider it is a thin pass-through.
+	// This ensures incoming traceparent headers create a root span even when no
+	// exporter is configured, allowing child spans to be linked correctly.
+	handler := otelhttp.NewHandler(router, "ingestion-api")
+	srv := server.New(cfg, handler)
 
 	slog.Info("ingestion-api starting", "port", cfg.Port, "env", cfg.Env)
 

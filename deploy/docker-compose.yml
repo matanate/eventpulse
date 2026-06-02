@@ -47,6 +47,16 @@ services:
     profiles:
       - observability
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    profiles:
+      - observability
+
 volumes:
   postgres_data:
   grafana_data:

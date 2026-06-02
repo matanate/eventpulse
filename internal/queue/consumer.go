@@ -103,6 +103,7 @@ func (c *StreamConsumer) Reclaim(ctx context.Context) ([]Message, error) {
 			ID:            m.ID,
 			Payload:       payload,
 			DeliveryCount: counts[m.ID],
+			Headers:       extractTraceHeaders(m.Values),
 		})
 	}
 	return msgs, nil
@@ -155,6 +156,7 @@ func toMessages(xmsgs []redis.XMessage, deliveryCount int64) []Message {
 			ID:            m.ID,
 			Payload:       payload,
 			DeliveryCount: deliveryCount,
+			Headers:       extractTraceHeaders(m.Values),
 		})
 	}
 	return out
@@ -172,4 +174,21 @@ func extractPayload(values map[string]any) ([]byte, bool) {
 		return t, true
 	}
 	return nil, false
+}
+
+// extractTraceHeaders copies W3C trace headers (traceparent, tracestate) from
+// stream message values into a string map for use with tracing.ExtractMap.
+func extractTraceHeaders(values map[string]any) map[string]string {
+	headers := make(map[string]string, 2)
+	for _, key := range []string{"traceparent", "tracestate"} {
+		if v, ok := values[key]; ok {
+			switch s := v.(type) {
+			case string:
+				headers[key] = s
+			case []byte:
+				headers[key] = string(s)
+			}
+		}
+	}
+	return headers
 }

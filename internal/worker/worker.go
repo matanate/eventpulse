@@ -9,10 +9,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/matangi/eventpulse/internal/events"
 	"github.com/matangi/eventpulse/internal/queue"
 	"github.com/matangi/eventpulse/internal/telemetry"
+	"github.com/matangi/eventpulse/internal/tracing"
 )
 
 // Worker runs configurable-concurrency goroutines that consume from a Redis Stream,
@@ -95,38 +99,52 @@ func (w *Worker) reclaimAndProcess(ctx context.Context) {
 func (w *Worker) handleMessage(ctx context.Context, msg queue.Message) {
 	start := time.Now()
 
+	// Continue the distributed trace that started in the ingestion handler.
+	// ExtractMap is a no-op when tracing is disabled or headers are absent.
+	parentCtx := tracing.ExtractMap(ctx, msg.Headers)
+	spanCtx, span := otel.Tracer("worker").Start(parentCtx, "worker.handle_message")
+	defer span.End()
+
 	e, err := decodeEvent(msg.Payload)
 	if err != nil {
 		// Unrecoverable format error — dead-letter without retry.
 		telemetry.EventsFailedTotal.WithLabelValues("format").Inc()
-		w.deadLetter(ctx, msg, fmt.Errorf("decode payload: %w", err))
+		span.SetStatus(codes.Error, "decode payload")
+		w.deadLetter(spanCtx, msg, fmt.Errorf("decode payload: %w", err))
 		return
 	}
 
-	if err := events.Store(ctx, w.pool, e); err != nil {
+	span.SetAttributes(
+		attribute.String("event.project_id", e.ProjectID),
+		attribute.String("event.name", e.Event),
+		attribute.String("msg.id", msg.ID),
+	)
+
+	traceID := tracing.TraceID(spanCtx)
+	log := slog.With("trace_id", traceID, "project_id", e.ProjectID, "event", e.Event, "msg_id", msg.ID)
+
+	if err := events.Store(spanCtx, w.pool, e); err != nil {
 		// Transient error — do not ACK; redelivered after MinIdleTime.
 		telemetry.EventsFailedTotal.WithLabelValues("transient").Inc()
-		slog.Error("worker: store event", "err", err,
-			"msg_id", msg.ID,
-			"project_id", e.ProjectID,
-			"event", e.Event,
-		)
+		span.SetStatus(codes.Error, "store event")
+		log.Error("worker: store event", "err", err)
 		return
 	}
 
-	if err := events.UpsertDailyCount(ctx, w.pool, e.ProjectID, e.Event, e.Timestamp); err != nil {
+	if err := events.UpsertDailyCount(spanCtx, w.pool, e.ProjectID, e.Event, e.Timestamp); err != nil {
 		// Non-fatal: event is persisted; aggregate lag is acceptable.
-		slog.Warn("worker: upsert daily count", "err", err, "project_id", e.ProjectID, "event", e.Event)
+		log.Warn("worker: upsert daily count", "err", err)
 	}
 
-	if err := events.UpsertDailyActiveUser(ctx, w.pool, e.ProjectID, e.UserID, e.Timestamp); err != nil {
-		slog.Warn("worker: upsert daily active user", "err", err, "project_id", e.ProjectID)
+	if err := events.UpsertDailyActiveUser(spanCtx, w.pool, e.ProjectID, e.UserID, e.Timestamp); err != nil {
+		log.Warn("worker: upsert daily active user", "err", err)
 	}
 
 	if err := w.consumer.Ack(ctx, msg.ID); err != nil {
-		slog.Error("worker: ack message", "err", err, "msg_id", msg.ID)
+		log.Error("worker: ack message", "err", err)
 	}
 
+	span.SetStatus(codes.Ok, "")
 	telemetry.EventsProcessedTotal.WithLabelValues("success").Inc()
 	telemetry.WorkerProcessingDurationSeconds.Observe(time.Since(start).Seconds())
 }
