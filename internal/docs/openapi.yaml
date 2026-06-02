@@ -212,6 +212,70 @@ components:
           type: string
           example: accepted
 
+    FunnelRequest:
+      type: object
+      required: [steps, window]
+      properties:
+        steps:
+          type: array
+          minItems: 2
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 100
+          description: Ordered list of event names defining the funnel steps
+          example: ["page_viewed", "button_clicked", "checkout_completed"]
+        window:
+          type: string
+          description: |
+            ISO 8601 duration for the step-to-step conversion window.
+            Each step must occur within this duration after the previous step.
+            Supported formats: PXD (days) or PXW (weeks). Maximum P90D.
+          example: P7D
+
+    FunnelStep:
+      type: object
+      required: [event, entered, converted, dropped, conversion_rate]
+      properties:
+        event:
+          type: string
+          example: page_viewed
+        entered:
+          type: integer
+          description: Unique users who reached this step
+          example: 120
+        converted:
+          type: integer
+          description: Users who proceeded to the next step (0 for last step)
+          example: 72
+        dropped:
+          type: integer
+          description: Users who did not proceed to the next step (0 for last step)
+          example: 48
+        conversion_rate:
+          type: number
+          format: float
+          description: converted / entered (0 for last step)
+          example: 0.6
+
+    FunnelResponse:
+      type: object
+      required: [steps, window, overall_conversion_rate]
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelStep"
+        window:
+          type: string
+          description: ISO 8601 duration echoed from the request
+          example: P7D
+        overall_conversion_rate:
+          type: number
+          format: float
+          description: Fraction of step-1 users who completed the final step
+          example: 0.258
+
 paths:
   /healthz:
     get:
@@ -620,6 +684,67 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/funnels:
+    post:
+      tags: [analytics]
+      summary: Funnel analysis
+      description: |
+        Computes a strict-order, step-to-step conversion funnel for the project.
+
+        For each consecutive pair of steps, counts the unique users who triggered
+        step N+1 within `window` after triggering step N (for the same `user_id`).
+        Events with a null `user_id` are excluded.
+
+        **Semantics**: Step-to-step window — the clock restarts at each step.
+        A user who does step 1 on day 0 and step 2 on day 6 satisfies a P7D window,
+        even if step 3 happens on day 12 (also within P7D of step 2).
+
+        **Caps**: 2–8 steps; window 1–90 days.
+      operationId: postFunnel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FunnelRequest"
+            example:
+              steps: ["page_viewed", "button_clicked", "checkout_completed"]
+              window: P7D
+      responses:
+        "200":
+          description: Funnel result with per-step conversion metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: Invalid request (bad JSON, invalid steps, unsupported window)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Project ID does not match the authenticated project
           content:
             application/json:
               schema:

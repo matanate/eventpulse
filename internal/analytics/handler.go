@@ -1,6 +1,10 @@
 package analytics
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -127,6 +131,75 @@ func (h *Handler) HandleUserEvents(w http.ResponseWriter, r *http.Request) {
 		"limit":  p.Limit,
 		"offset": p.Offset,
 	})
+}
+
+func (h *Handler) HandleFunnel(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := scopeCheck(w, r)
+	if !ok {
+		return
+	}
+
+	// 32 KB is generous for up to 8 step names of 100 chars each.
+	r.Body = http.MaxBytesReader(w, r.Body, 32*1024)
+
+	var req struct {
+		Steps  []string `json:"steps"`
+		Window string   `json:"window"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			api.WriteError(w, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE", "request body too large")
+			return
+		}
+		api.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
+		return
+	}
+
+	if len(req.Steps) < minFunnelSteps || len(req.Steps) > maxFunnelSteps {
+		api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM",
+			fmt.Sprintf("steps must have %d–%d entries", minFunnelSteps, maxFunnelSteps))
+		return
+	}
+	seen := make(map[string]struct{}, len(req.Steps))
+	for _, s := range req.Steps {
+		if s == "" || len(s) > 100 {
+			api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM",
+				"each step must be 1–100 characters")
+			return
+		}
+		if _, dup := seen[s]; dup {
+			api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", "duplicate step names are not allowed")
+			return
+		}
+		seen[s] = struct{}{}
+	}
+
+	window, err := ParseFunnelWindow(req.Window)
+	if err != nil {
+		api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", err.Error())
+		return
+	}
+
+	queryCtx, queryCancel := contextWithFunnelTimeout(r.Context())
+	defer queryCancel()
+
+	result, err := Funnel(queryCtx, h.pool, projectID, FunnelParams{
+		Steps:  req.Steps,
+		Window: window,
+	})
+	if err != nil {
+		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+
+	api.WriteJSON(w, http.StatusOK, result)
+}
+
+// contextWithFunnelTimeout wraps ctx with a 10-second deadline for the funnel query.
+// Funnel queries involve N-1 self-joins and can be significantly heavier than other analytics queries.
+func contextWithFunnelTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 10*time.Second)
 }
 
 func parseListParams(r *http.Request) ListParams {
