@@ -53,7 +53,10 @@ A sorted set keyed on `rl:{api_key_id}` stores request timestamps as scores. The
 
 **Cost / mitigation**
 
-- Redis is a dependency for every authenticated request. If Redis is down, the middleware returns 500 (fail-closed). A fail-open mode (skip rate limiting on Redis error) could be added but risks abuse during Redis outages.
+- Redis is a dependency for every authenticated request. If Redis is down, the limiter's behaviour depends on `FailMode`:
+  - `FailClosed` (default): middleware returns 500. Safe — no requests bypass rate limiting — but availability suffers if Redis has a transient blip.
+  - `FailOpen`: requests are allowed through unthrottled. Availability is preserved at the cost of potentially unbounded throughput during a Redis outage.
+  A half-open **circuit breaker** (3 consecutive failures → open; resets after 10s) wraps all Redis calls. When the breaker is open, `FailClosed` immediately returns an error without waiting for a Redis timeout — this keeps latency bounded and frees connections. The breaker state is exported as a Prometheus gauge (`rate_limiter_circuit_breaker_state`) and an alert fires if it stays open for > 1 minute.
 - Memory per active key: O(requests in window) sorted set entries. At 100 req/min, each ZSET entry is ~20 bytes, so ~2 KB per active key. Negligible.
 - `Retry-After` header is set to the exact seconds until the oldest entry expires, giving clients precise backoff timing.
 

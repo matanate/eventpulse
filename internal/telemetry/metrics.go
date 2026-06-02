@@ -68,4 +68,44 @@ var (
 		Name: "webhook_pending_deliveries",
 		Help: "Number of webhook delivery rows claimed in the latest dispatcher poll.",
 	})
+
+	// DB connection pool gauges — updated every 15s by telemetry.StartDBPoolCollector.
+
+	DBPoolAcquiredConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "db_pool_acquired_connections",
+		Help: "Number of connections currently checked out from the pgx pool.",
+	})
+
+	DBPoolIdleConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "db_pool_idle_connections",
+		Help: "Number of idle connections in the pgx pool.",
+	})
+
+	DBPoolWaitCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "db_pool_wait_count",
+		Help: "Cumulative number of times Acquire had to wait for a connection.",
+	})
+
+	DBPoolWaitDurationSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "db_pool_wait_duration_seconds",
+		Help: "Cumulative duration spent waiting for a connection from the pgx pool.",
+	})
+
+	// Redis connection pool gauges — updated every 15s by telemetry.StartRedisPoolCollector.
+
+	RedisPoolActiveConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "redis_pool_active_connections",
+		Help: "Number of connections currently in use (hits + misses - stale).",
+	})
+
+	RedisPoolIdleConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "redis_pool_idle_connections",
+		Help: "Number of idle connections in the Redis pool.",
+	})
+
+	// RateLimiterCircuitBreakerState tracks the circuit breaker state: 0=closed, 1=half-open, 2=open.
+	RateLimiterCircuitBreakerState = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "rate_limiter_circuit_breaker_state",
+		Help: "Circuit breaker state for the Redis rate limiter (0=closed, 1=half-open, 2=open).",
+	})
 )
