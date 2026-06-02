@@ -8,13 +8,7 @@ import (
 	"time"
 )
 
-// fakeRedis implements just enough of the Redis interface to drive Allow().
-// It returns a fixed error on every call when errMode is true.
-type fakeRedis struct {
-	errMode bool
-}
-
-// We can't inject fakeRedis through the public API because Limiter holds a
+// We can't inject a fake Redis through the public API because Limiter holds a
 // concrete *redis.Client. Instead we test the circuit breaker directly and
 // test FailMode semantics via the internalLimiter wrapper below.
 // NOTE: FailMode behavior in the production Limiter.Allow is NOT directly

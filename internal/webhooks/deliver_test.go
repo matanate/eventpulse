@@ -35,7 +35,9 @@ func TestSign(t *testing.T) {
 func TestSign_Deterministic(t *testing.T) {
 	secret := []byte("key")
 	body := []byte("body")
-	if Sign(secret, body) != Sign(secret, body) {
+	sig1 := Sign(secret, body)
+	sig2 := Sign(secret, body)
+	if sig1 != sig2 {
 		t.Error("Sign is not deterministic")
 	}
 }
