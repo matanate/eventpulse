@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
-	maxEventNameLen      = 255
-	maxUserIDLen         = 255
-	maxIdempotencyKeyLen = 255
-	maxPropertiesKeys    = 50
-	maxPropertiesBytes   = 4 * 1024 // 4 KiB encoded
-	maxTimestampPast     = 24 * time.Hour
-	maxTimestampFuture   = time.Minute
+	maxEventNameLen    = 255
+	maxUserIDLen       = 255
+	maxPropertiesKeys  = 50
+	maxPropertiesBytes = 4 * 1024 // 4 KiB encoded
+	maxTimestampPast   = 24 * time.Hour
+	maxTimestampFuture = time.Minute
 )
 
 type Event struct {
@@ -45,8 +46,10 @@ func (e *Event) Validate() []ValidationError {
 		errs = append(errs, ValidationError{Field: "user_id", Message: "user_id must not exceed 255 characters"})
 	}
 
-	if len(e.IdempotencyKey) > maxIdempotencyKeyLen {
-		errs = append(errs, ValidationError{Field: "idempotency_key", Message: "idempotency_key must not exceed 255 characters"})
+	if e.IdempotencyKey != "" {
+		if _, err := uuid.Parse(e.IdempotencyKey); err != nil {
+			errs = append(errs, ValidationError{Field: "idempotency_key", Message: "idempotency_key must be a valid UUID"})
+		}
 	}
 
 	if len(e.Properties) > maxPropertiesKeys {

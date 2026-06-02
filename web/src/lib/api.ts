@@ -85,6 +85,28 @@ export async function postEvent(payload: PostEventPayload): Promise<PostEventRes
   return { ok: false, status: res.status, message: `HTTP ${res.status}` }
 }
 
+export type DuplicateResult = { first: PostEventResult; second: PostEventResult }
+
+export async function postEventDuplicate(payload: PostEventPayload): Promise<DuplicateResult> {
+  const key = crypto.randomUUID()
+  const send = async (): Promise<PostEventResult> => {
+    const res = await fetch(`${API_BASE_URL}/v1/events`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Idempotency-Key': key },
+      body: JSON.stringify(payload),
+    })
+    if (res.status === 202) return { ok: true }
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
+      return { ok: false, status: 429, retryAfter }
+    }
+    return { ok: false, status: res.status, message: `HTTP ${res.status}` }
+  }
+  const first = await send()
+  const second = await send()
+  return { first, second }
+}
+
 export async function postEventWithBadKey(payload: PostEventPayload): Promise<PostEventResult> {
   const res = await fetch(`${API_BASE_URL}/v1/events`, {
     method: 'POST',

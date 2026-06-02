@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -21,6 +21,24 @@ describe('EventSender — single mode', () => {
   it('renders the auth failure demo link', () => {
     render(<EventSender />)
     expect(screen.getByText(/demo: try invalid api key/i)).toBeInTheDocument()
+  })
+
+  it('renders the idempotency duplicate demo link', () => {
+    render(<EventSender />)
+    expect(screen.getByText(/demo: send duplicate/i)).toBeInTheDocument()
+  })
+
+  it('shows idempotency proof message after duplicate demo', async () => {
+    const onRequest = vi.fn()
+    render(<EventSender onRequest={onRequest} />)
+
+    fireEvent.click(screen.getByText(/demo: send duplicate/i))
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(/2× accepted · 1 unique event/i),
+    )
+    // Both requests are logged
+    expect(onRequest).toHaveBeenCalledTimes(2)
   })
 
   it('shows success flash after 202 response', async () => {

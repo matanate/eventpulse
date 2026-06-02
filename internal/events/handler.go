@@ -72,6 +72,11 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	e := buildEvent(req, projectID, now)
 
+	// Header takes precedence over body field.
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		e.IdempotencyKey = key
+	}
+
 	if errs := e.Validate(); len(errs) > 0 {
 		api.WriteValidationError(w, toFieldErrors(errs))
 		return
