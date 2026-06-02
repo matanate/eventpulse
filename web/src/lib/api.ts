@@ -197,6 +197,33 @@ export interface QueueStats {
   dead_letter_count: number
 }
 
+export interface FunnelStep {
+  event: string
+  entered: number
+  converted: number
+  dropped: number
+  conversion_rate: number // 0 for the last step
+}
+
+export interface FunnelResult {
+  steps: FunnelStep[]
+  window: string
+  overall_conversion_rate: number
+}
+
+export async function postFunnel(steps: string[], windowPeriod: string): Promise<FunnelResult> {
+  const res = await fetch(
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/funnels`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ steps, window: windowPeriod }),
+    },
+  )
+  if (!res.ok) throw new Error(`funnel: HTTP ${res.status}`)
+  return res.json() as Promise<FunnelResult>
+}
+
 export async function getQueueStats(): Promise<QueueStats> {
   const res = await fetch(`${API_BASE_URL}/v1/admin/queue/stats`, {
     headers: authHeaders(),

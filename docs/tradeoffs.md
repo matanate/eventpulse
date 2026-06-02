@@ -119,7 +119,49 @@ Redis Streams' Pending Entries List (PEL) tracks unacknowledged messages per con
 
 ---
 
-## 5. Scaling Paths
+## 5. Funnel Analysis
+
+**Context**
+
+The funnel query must identify users who performed an ordered sequence of events. The schema has no explicit session concept, only `(project_id, user_id, event, timestamp)` rows. Two design choices significantly affect query performance and semantics: window measurement and SQL shape.
+
+**Window semantics**
+
+| Option | Meaning | Tradeoff |
+|---|---|---|
+| Session window (from step 1) | All steps must occur within N days of the first event | Stricter; fairer cross-funnel comparison |
+| Step-to-step window (chosen) | Each step must occur within N days of the previous step | Simpler SQL; allows slow funnels to still convert |
+
+**Choice: step-to-step window**
+
+Each CTE starts from the previous step's `MIN(timestamp)`, so the window resets at each step. A user who takes 6 days between step 1→2 and another 6 days between step 2→3 satisfies a P7D window. A session window would require carrying `step_0.ts` through every CTE join, adding complexity with no material benefit at the scale this system targets.
+
+**SQL shape**
+
+The query builds N CTEs dynamically — one per step. Each CTE is a self-join on the `events` table keyed by `(project_id, user_id, timestamp)`:
+
+```sql
+step_1 AS (
+    SELECT s.user_id, MIN(e.timestamp) AS ts
+    FROM step_0 s
+    JOIN events e ON e.project_id = $1 AND e.event = $step1
+        AND e.user_id = s.user_id
+        AND e.timestamp > s.ts AND e.timestamp <= s.ts + $window
+    GROUP BY s.user_id
+)
+```
+
+The `(project_id, user_id, timestamp DESC) WHERE user_id IS NOT NULL` index supports every step join. For a 3-step funnel, the planner performs 2 nested-loop index scans over the user cohort from the previous step — typically O(users × log(events_per_user)).
+
+**Caps and exclusions**
+
+- 2–8 steps: prevents quadratic query growth.
+- 90-day maximum window: keeps the cohort from expanding to all-time data.
+- `NULL user_id` events are excluded: funnels are user-journey analysis; anonymous events have no identity to chain across steps.
+
+---
+
+## 6. Scaling Paths
 
 **Current architecture is single-instance by design** — one API process, one worker process. Here is how each bottleneck scales horizontally.
 
