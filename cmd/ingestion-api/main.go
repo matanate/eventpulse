@@ -21,6 +21,7 @@ import (
 	"github.com/matangi/eventpulse/internal/ratelimit"
 	"github.com/matangi/eventpulse/internal/server"
 	"github.com/matangi/eventpulse/internal/tracing"
+	"github.com/matangi/eventpulse/internal/webhooks"
 )
 
 func main() {
@@ -75,7 +76,8 @@ func main() {
 	eventHandler := events.NewHandler(publisher, pool)
 	analyticsHandler := analytics.NewHandler(pool)
 	queueStatsHandler := queue.NewStatsHandler(inspector, pool)
-	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, authMW, limiter.Middleware())
+	webhookHandler := webhooks.NewHandler(pool, cfg.IsDevelopment())
+	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, webhookHandler, authMW, limiter.Middleware())
 	// otelhttp is always installed; with the no-op provider it is a thin pass-through.
 	// This ensures incoming traceparent headers create a root span even when no
 	// exporter is configured, allowing child spans to be linked correctly.

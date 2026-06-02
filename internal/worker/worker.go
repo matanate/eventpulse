@@ -19,19 +19,26 @@ import (
 	"github.com/matangi/eventpulse/internal/tracing"
 )
 
+// WebhookEnqueuer is satisfied by webhooks.Enqueuer. The interface is defined
+// here so the worker package does not import the webhooks package directly.
+type WebhookEnqueuer interface {
+	EnqueueDeliveries(ctx context.Context, projectID, eventName, eventID string, payload []byte) (int, error)
+}
+
 // Worker runs configurable-concurrency goroutines that consume from a Redis Stream,
 // persist events to Postgres, and handle retries + dead-lettering.
 type Worker struct {
 	consumer    queue.Consumer
 	pool        *pgxpool.Pool
 	concurrency int
+	enqueuer    WebhookEnqueuer // optional; nil disables webhook delivery
 }
 
-func New(consumer queue.Consumer, pool *pgxpool.Pool, concurrency int) *Worker {
+func New(consumer queue.Consumer, pool *pgxpool.Pool, concurrency int, enqueuer WebhookEnqueuer) *Worker {
 	if concurrency <= 0 {
 		concurrency = 1
 	}
-	return &Worker{consumer: consumer, pool: pool, concurrency: concurrency}
+	return &Worker{consumer: consumer, pool: pool, concurrency: concurrency, enqueuer: enqueuer}
 }
 
 // Run starts concurrency goroutines and blocks until ctx is cancelled and all
@@ -129,6 +136,14 @@ func (w *Worker) handleMessage(ctx context.Context, msg queue.Message) {
 		span.SetStatus(codes.Error, "store event")
 		log.Error("worker: store event", "err", err)
 		return
+	}
+
+	// Enqueue webhook deliveries before ACK so a crash between store and ACK
+	// redelivers the message and the dedupe index prevents duplicate rows.
+	if w.enqueuer != nil {
+		if _, err := w.enqueuer.EnqueueDeliveries(spanCtx, e.ProjectID, e.Event, e.ID, msg.Payload); err != nil {
+			log.Warn("worker: enqueue webhook deliveries", "err", err)
+		}
 	}
 
 	if err := events.UpsertDailyCount(spanCtx, w.pool, e.ProjectID, e.Event, e.Timestamp); err != nil {
