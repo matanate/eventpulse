@@ -14,6 +14,8 @@ var specYAML []byte
 var specJSON []byte
 
 func init() {
+	// yaml.v3 → any → json.Marshal: safe for all scalar types the spec uses.
+	// Binary YAML scalars (!!binary) are intentionally excluded from openapi.yaml.
 	var v any
 	if err := yaml.Unmarshal(specYAML, &v); err != nil {
 		panic("docs: invalid openapi.yaml: " + err.Error())
@@ -28,9 +30,13 @@ func init() {
 // HandleSpec serves the OpenAPI 3.1 specification as JSON.
 func HandleSpec(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(specJSON)
 }
 
+// scalarHTML embeds the Scalar API reference UI via CDN.
+// Version is pinned to the @1 major range; upgrade by bumping the tag and
+// regenerating the SRI hash (sha384) at https://www.srihash.org/.
 const scalarHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -42,7 +48,8 @@ const scalarHTML = `<!DOCTYPE html>
   <script
     id="api-reference"
     data-url="/openapi.json"
-    src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    crossorigin="anonymous"
+    src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1"></script>
 </body>
 </html>`
 
