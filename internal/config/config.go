@@ -21,6 +21,7 @@ type Config struct {
 	WorkerConcurrency int
 	DBMaxConns        int
 	DBMinConns        int
+	OTELEndpoint      string // optional: OTLP HTTP endpoint (e.g. http://jaeger:4318); empty disables tracing
 }
 
 func Load() (*Config, error) {
@@ -37,6 +38,7 @@ func Load() (*Config, error) {
 		WorkerConcurrency: getInt("WORKER_CONCURRENCY", 5),
 		DBMaxConns:        getInt("DB_MAX_CONNS", 25),
 		DBMinConns:        getInt("DB_MIN_CONNS", 5),
+		OTELEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	}
 
 	var missing []string

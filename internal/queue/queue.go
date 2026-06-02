@@ -17,6 +17,7 @@ type Message struct {
 	ID            string
 	Payload       []byte
 	DeliveryCount int64
+	Headers       map[string]string // propagated trace headers (e.g. "traceparent")
 }
 
 // Consumer reads messages from the stream.

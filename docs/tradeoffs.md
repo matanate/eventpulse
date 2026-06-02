@@ -228,3 +228,31 @@ The `events` table grows linearly with event volume. Current mitigations:
 `daily_event_counts` is the aggregate layer — most dashboard queries read from this table, not `events`. This scales well because it has O(days × projects × event_names) rows regardless of total event volume.
 
 For real-time analytics at > 10k events/s, a ClickHouse mirror populated via Debezium CDC from Postgres would serve analytical queries without competing with OLTP writes.
+
+---
+
+## 8. Distributed Tracing
+
+**Context**
+
+EventPulse is a two-service system with an async boundary: the ingestion API enqueues events into Redis Streams, and the worker processes them asynchronously. Without trace context propagation, a single logical "event ingest" operation produces disjoint spans in the ingestion API and worker with no way to correlate them.
+
+**Options considered**
+
+| Approach | Propagation mechanism | Notes |
+|---|---|---|
+| W3C `traceparent` in stream message values | Store as a field alongside `payload` in `XADD` values | Chosen — standard, no Redis config required |
+| Encode trace context inside the event JSON payload | Embed in the `properties` JSONB | Pollutes the domain model with infrastructure concerns |
+| Infer correlation from timestamps | No explicit context | Unreliable; breaks at any concurrency |
+
+**Choice**
+
+W3C `traceparent` injected as a top-level field in the Redis Stream entry alongside `payload`. The publisher calls `tracing.InjectMap(ctx, headers)` and merges the result into the XADD `Values` map. The consumer reads it back into `Message.Headers`; the worker calls `tracing.ExtractMap(ctx, msg.Headers)` to restore the parent context before starting its `worker.handle_message` child span.
+
+**Graceful degradation**
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` controls whether the real SDK is installed. When the variable is absent (Railway production), the global propagator is still registered (so inject/extract are no-ops on a context with no active span) and the default no-op `TracerProvider` is used — zero overhead. Jaeger is wired under the `observability` Docker Compose profile for local development only.
+
+**Sampling**
+
+`AlwaysSample` is used because this is a portfolio/demo system where complete trace coverage is more valuable than volume reduction. A production deployment with significant traffic would switch to a `ParentBased(TraceIDRatioBased(0.01))` sampler and move the sampling decision upstream to the API gateway.

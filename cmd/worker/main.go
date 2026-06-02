@@ -18,6 +18,7 @@ import (
 	"github.com/matangi/eventpulse/internal/queue"
 	rdb "github.com/matangi/eventpulse/internal/redis"
 	"github.com/matangi/eventpulse/internal/telemetry"
+	"github.com/matangi/eventpulse/internal/tracing"
 	"github.com/matangi/eventpulse/internal/worker"
 )
 
@@ -32,6 +33,19 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	tracingShutdown, err := tracing.Setup(ctx, "worker", cfg.OTELEndpoint)
+	if err != nil {
+		slog.Error("tracing setup failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tracingShutdown(shutdownCtx); err != nil {
+			slog.Error("tracing shutdown error", "err", err)
+		}
+	}()
 
 	pool, err := db.New(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBMinConns)
 	if err != nil {
