@@ -19,6 +19,7 @@ import (
 	rdb "github.com/matangi/eventpulse/internal/redis"
 	"github.com/matangi/eventpulse/internal/telemetry"
 	"github.com/matangi/eventpulse/internal/tracing"
+	"github.com/matangi/eventpulse/internal/webhooks"
 	"github.com/matangi/eventpulse/internal/worker"
 )
 
@@ -107,7 +108,20 @@ func main() {
 		}
 	}()
 
-	w := worker.New(consumer, pool, cfg.WorkerConcurrency)
+	enqueuer := webhooks.NewEnqueuer(pool)
+
+	dispatcherCfg := webhooks.DispatcherConfig{
+		PollInterval: cfg.WebhookPollInterval,
+		BatchSize:    cfg.WebhookBatchSize,
+		HTTPTimeout:  cfg.WebhookHTTPTimeout,
+		MinInterval:  cfg.WebhookMinInterval,
+		AllowHTTP:    cfg.IsDevelopment(),
+		SecretKey:    cfg.WebhookSecretKey,
+	}
+	dispatcher := webhooks.NewDispatcher(pool, dispatcherCfg)
+	go dispatcher.Run(ctx)
+
+	w := worker.New(consumer, pool, cfg.WorkerConcurrency, enqueuer)
 
 	slog.Info("worker starting",
 		"env", cfg.Env,

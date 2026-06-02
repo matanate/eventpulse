@@ -49,4 +49,23 @@ var (
 		Help:    "Time spent processing a single event in the worker.",
 		Buckets: prometheus.DefBuckets,
 	})
+
+	// WebhookDeliveriesTotal counts outbound webhook delivery attempts by outcome.
+	WebhookDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "webhook_deliveries_total",
+		Help: "Total webhook delivery attempts by outcome.",
+	}, []string{"status"}) // delivered | retried | failed
+
+	// WebhookDeliveryDurationSeconds tracks HTTP delivery round-trip time.
+	WebhookDeliveryDurationSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "webhook_delivery_duration_seconds",
+		Help:    "Time spent on a successful webhook HTTP delivery.",
+		Buckets: prometheus.DefBuckets,
+	})
+
+	// WebhookPendingDeliveries is set by the dispatcher on each poll cycle.
+	WebhookPendingDeliveries = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "webhook_pending_deliveries",
+		Help: "Number of webhook delivery rows claimed in the latest dispatcher poll.",
+	})
 )

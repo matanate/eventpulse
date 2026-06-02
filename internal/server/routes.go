@@ -14,6 +14,7 @@ import (
 	"github.com/matangi/eventpulse/internal/health"
 	"github.com/matangi/eventpulse/internal/queue"
 	"github.com/matangi/eventpulse/internal/telemetry"
+	"github.com/matangi/eventpulse/internal/webhooks"
 )
 
 func NewRouter(
@@ -21,6 +22,7 @@ func NewRouter(
 	eventHandler *events.Handler,
 	analyticsHandler *analytics.Handler,
 	queueStatsHandler *queue.StatsHandler,
+	webhookHandler *webhooks.Handler,
 	authMW func(http.Handler) http.Handler,
 	rlMW func(http.Handler) http.Handler,
 ) http.Handler {
@@ -32,7 +34,7 @@ func NewRouter(
 			"https://eventpulse.atedgimatan.com",
 			"http://localhost:5173",
 		},
-		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowedMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Authorization", "Content-Type", "Idempotency-Key"},
 		MaxAge:         300,
 	}))
@@ -58,6 +60,10 @@ func NewRouter(
 
 			r.Post("/events", eventHandler.HandleIngest)
 			r.Post("/events/batch", eventHandler.HandleBatchIngest)
+
+			r.Post("/webhooks", webhookHandler.HandleCreate)
+			r.Get("/webhooks", webhookHandler.HandleList)
+			r.Delete("/webhooks/{id}", webhookHandler.HandleDelete)
 
 			r.Route("/projects/{projectID}", func(r chi.Router) {
 				r.Get("/stats", analyticsHandler.HandleStats)

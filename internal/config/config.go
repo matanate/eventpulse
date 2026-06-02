@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -22,6 +23,13 @@ type Config struct {
 	DBMaxConns        int
 	DBMinConns        int
 	OTELEndpoint      string // optional: OTLP HTTP endpoint (e.g. http://jaeger:4318); empty disables tracing
+
+	// Webhook dispatcher tunables — all optional with safe defaults.
+	WebhookPollInterval time.Duration
+	WebhookBatchSize    int
+	WebhookHTTPTimeout  time.Duration
+	WebhookMinInterval  time.Duration // minimum delay between delivery attempts per subscription
+	WebhookSecretKey    []byte        // 32-byte AES-256 key for at-rest secret encryption (required)
 }
 
 func Load() (*Config, error) {
@@ -39,6 +47,11 @@ func Load() (*Config, error) {
 		DBMaxConns:        getInt("DB_MAX_CONNS", 25),
 		DBMinConns:        getInt("DB_MIN_CONNS", 5),
 		OTELEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+
+		WebhookPollInterval: getDuration("WEBHOOK_POLL_INTERVAL", time.Second),
+		WebhookBatchSize:    clamp(getInt("WEBHOOK_BATCH_SIZE", 50), 1, 500),
+		WebhookHTTPTimeout:  getDuration("WEBHOOK_HTTP_TIMEOUT", 10*time.Second),
+		WebhookMinInterval:  getDuration("WEBHOOK_MIN_INTERVAL", time.Second),
 	}
 
 	var missing []string
@@ -51,6 +64,21 @@ func Load() (*Config, error) {
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
+
+	// WEBHOOK_SECRET_KEY is validated separately to give a precise error rather
+	// than conflating "missing" with "malformed".
+	rawKey := os.Getenv("WEBHOOK_SECRET_KEY")
+	if rawKey == "" {
+		return nil, fmt.Errorf("missing required environment variable: WEBHOOK_SECRET_KEY (generate with: openssl rand -hex 32)")
+	}
+	webhookKey, keyErr := hex.DecodeString(rawKey)
+	if keyErr != nil {
+		return nil, fmt.Errorf("WEBHOOK_SECRET_KEY is not valid hex: %w", keyErr)
+	}
+	if len(webhookKey) != 32 {
+		return nil, fmt.Errorf("WEBHOOK_SECRET_KEY must decode to exactly 32 bytes (got %d); generate with: openssl rand -hex 32", len(webhookKey))
+	}
+	cfg.WebhookSecretKey = webhookKey
 
 	return cfg, nil
 }
@@ -88,4 +116,14 @@ func getInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func clamp(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }

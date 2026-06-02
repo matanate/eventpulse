@@ -131,7 +131,7 @@ func TestWorker_ProcessesEvent(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	w := worker.New(consumer, testPool, 1)
+	w := worker.New(consumer, testPool, 1, nil)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -176,7 +176,7 @@ func TestWorker_DeadLetters_MalformedPayload(t *testing.T) {
 		t.Fatalf("xadd: %v", err)
 	}
 
-	w := worker.New(consumer, testPool, 1)
+	w := worker.New(consumer, testPool, 1, nil)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
