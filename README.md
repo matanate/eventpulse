@@ -52,13 +52,13 @@ curl -X POST $DEMO_URL/v1/events \
   -d '{"event":"page_viewed","user_id":"user_42","properties":{"page":"/pricing"}}'
 # → 202 {"status":"queued"}
 
-# Send the same event again — idempotency in action
+# Run this command twice — idempotency in action
 curl -X POST $DEMO_URL/v1/events \
   -H "Authorization: Bearer $DEMO_KEY" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
   -d '{"event":"checkout_started","user_id":"user_42","properties":{"plan":"pro"}}'
-# → 202 on both calls; one row in Postgres
+# → 202 on both runs; one row stored in Postgres
 
 # Query project stats
 curl $DEMO_URL/v1/projects/$PROJECT_ID/stats \
