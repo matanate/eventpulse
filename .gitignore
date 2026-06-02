@@ -30,6 +30,10 @@ web/dist/
 web/.env.local
 web/coverage/
 
+# TypeScript client SDK
+sdk/node_modules/
+sdk/coverage/
+
 # Internal / Claude Code files
 CLAUDE.md
 docs/plan.md

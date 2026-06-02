@@ -21,7 +21,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@eventpulse/client": ["../sdk/src/index.ts"]
     }
   },
   "include": ["src"],

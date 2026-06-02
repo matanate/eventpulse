@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react'
-import { postEvent, postEventsBatch, postEventWithBadKey, postEventDuplicate, type PostEventPayload } from '@/lib/api'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { EventPulseClient } from '@eventpulse/client'
+import { postEventWithBadKey, postEventDuplicate, type PostEventPayload } from '@/lib/api'
+import { API_BASE_URL, DEMO_API_KEY } from '@/lib/constants'
 import { formatEventName } from '@/lib/format'
 import { RateLimitBanner } from './RateLimitBanner'
 import { Button } from '@/components/ui/button'
@@ -41,6 +43,23 @@ interface EventSenderProps {
 }
 
 export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
+  // useRef with lazy init avoids the Strict Mode double-timer problem that
+  // useMemo has: React may run the factory twice in dev, creating two intervals.
+  // useRef guarantees a single instance; the effect cleanup stops the timer.
+  const clientRef = useRef<EventPulseClient | null>(null)
+  if (clientRef.current === null) {
+    clientRef.current = new EventPulseClient({
+      endpoint: API_BASE_URL,
+      apiKey: DEMO_API_KEY,
+      flushIntervalMs: 60_000,
+      maxQueueSize: 100,
+      maxRetries: 3,
+    })
+  }
+  const client = clientRef.current
+
+  useEffect(() => () => client.destroy(), [client])
+
   const [eventType, setEventType] = useState<string>(EVENT_TYPES[0])
   const [userId, setUserId] = useState(randomUserId)
   const [sentCount, setSentCount] = useState(0)
@@ -68,28 +87,29 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
 
     const start = Date.now()
     try {
-      const result = await postEvent({ event: eventType, user_id: userId })
+      client.track(eventType, userId)
+      const result = await client.flush()
       const latencyMs = Date.now() - start
 
-      if (result.ok) {
+      if (result.sent > 0) {
         setSentCount((c) => c + 1)
         setFlash('success')
-        onRequest?.({ method: 'POST', path: '/v1/events', status: 202, latencyMs })
+        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 202, latencyMs })
         setTimeout(() => setFlash(null), 1_500)
-      } else if (result.status === 429 && 'retryAfter' in result) {
-        setRateLimitSeconds(result.retryAfter)
-        onRequest?.({ method: 'POST', path: '/v1/events', status: 429, latencyMs })
-      } else if ('message' in result) {
-        setErrorMsg(result.message)
+      } else if (result.rateLimitSeconds !== undefined) {
+        setRateLimitSeconds(result.rateLimitSeconds)
+        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 429, latencyMs })
+      } else {
+        setErrorMsg('Failed to send — server error')
         setFlash('error')
-        onRequest?.({ method: 'POST', path: '/v1/events', status: result.status, latencyMs })
+        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 500, latencyMs })
         setTimeout(() => setFlash(null), 3_000)
       }
     } catch {
       const latencyMs = Date.now() - start
       setErrorMsg('Network error — check your connection')
       setFlash('error')
-      onRequest?.({ method: 'POST', path: '/v1/events', status: 0, latencyMs })
+      onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 0, latencyMs })
       setTimeout(() => setFlash(null), 3_000)
     } finally {
       setSendingState(false)
@@ -105,21 +125,24 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
 
     const start = Date.now()
     try {
-      const result = await postEventsBatch(generateBatch(batchCount))
+      const payload = generateBatch(batchCount)
+      const result = await client.trackBatch(
+        payload.map((e) => ({ event: e.event, userId: e.user_id, properties: e.properties })),
+      )
       const latencyMs = Date.now() - start
 
-      if (result.ok) {
-        setBatchResult(result.count)
+      if (result.sent > 0) {
+        setBatchResult(result.sent)
         setBatchFlash('success')
         onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 202, latencyMs })
         setTimeout(() => setBatchFlash(null), 2_000)
-      } else if (result.status === 429 && 'retryAfter' in result) {
-        setRateLimitSeconds(result.retryAfter)
+      } else if (result.rateLimitSeconds !== undefined) {
+        setRateLimitSeconds(result.rateLimitSeconds)
         onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 429, latencyMs })
-      } else if ('message' in result) {
-        setBatchErrorMsg(result.message)
+      } else {
+        setBatchErrorMsg('Failed to send — server error')
         setBatchFlash('error')
-        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: result.status, latencyMs })
+        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 500, latencyMs })
         setTimeout(() => setBatchFlash(null), 3_000)
       }
     } catch {
@@ -133,6 +156,8 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     }
   }
 
+  // Demo: send the same event twice with the same Idempotency-Key.
+  // Uses the raw API directly because the SDK generates a fresh key per track() call.
   const handleDuplicateDemo = async () => {
     if (sending) return
     setSendingState(true)
@@ -157,6 +182,8 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     }
   }
 
+  // Demo: attempt ingestion with an invalid API key to show 401 auth rejection.
+  // Uses the raw API directly because the SDK client is already bound to the demo key.
   const handleAuthFailureDemo = async () => {
     if (sending) return
     setSendingState(true)
@@ -164,7 +191,7 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     try {
       const result = await postEventWithBadKey({ event: eventType, user_id: userId })
       const latencyMs = Date.now() - start
-      onRequest?.({ method: 'POST', path: '/v1/events', status: result.ok ? 202 : (result.status as number), latencyMs })
+      onRequest?.({ method: 'POST', path: '/v1/events', status: result.ok ? 202 : result.status, latencyMs })
     } catch {
       const latencyMs = Date.now() - start
       onRequest?.({ method: 'POST', path: '/v1/events', status: 401, latencyMs })

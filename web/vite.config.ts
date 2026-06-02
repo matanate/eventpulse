@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@eventpulse/client': path.resolve(__dirname, '../sdk/src/index.ts'),
     },
   },
   build: {
