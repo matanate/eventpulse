@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,9 +17,16 @@ import (
 	"github.com/matangi/eventpulse/internal/telemetry"
 )
 
+// Broadcaster is an optional hook for broadcasting events to real-time subscribers
+// (e.g. SSE connections) after successful ingestion.
+type Broadcaster interface {
+	Broadcast(ctx context.Context, channel, payload string)
+}
+
 type Handler struct {
-	pub  Publisher
-	pool *pgxpool.Pool // optional: if set, events are written directly to DB for immediate feed visibility
+	pub         Publisher
+	pool        *pgxpool.Pool // optional: if set, events are written directly to DB for immediate feed visibility
+	broadcaster Broadcaster   // optional: if set, events are published to real-time channel after ingest
 }
 
 // NewHandler creates an event handler. Pass a non-nil pool to enable direct
@@ -26,6 +34,23 @@ type Handler struct {
 // in analytics queries without waiting for the worker).
 func NewHandler(pub Publisher, pool *pgxpool.Pool) *Handler {
 	return &Handler{pub: pub, pool: pool}
+}
+
+// WithBroadcaster attaches a real-time broadcaster (SSE pub/sub).
+func (h *Handler) WithBroadcaster(b Broadcaster) *Handler {
+	h.broadcaster = b
+	return h
+}
+
+// sseEvent is the minimal JSON shape broadcast to SSE subscribers.
+// It mirrors the EventRow TypeScript interface in the frontend.
+type sseEvent struct {
+	ID         string         `json:"id"`
+	Event      string         `json:"event"`
+	UserID     string         `json:"user_id,omitempty"`
+	Properties map[string]any `json:"properties,omitempty"`
+	Timestamp  string         `json:"timestamp"`
+	ReceivedAt string         `json:"received_at"`
 }
 
 type ingestRequest struct {
@@ -96,6 +121,8 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.broadcastEvent(r.Context(), e)
+
 	telemetry.EventsIngestedTotal.WithLabelValues("success").Inc()
 	api.WriteJSON(w, http.StatusAccepted, ingestResponse{Status: "queued"})
 }
@@ -162,6 +189,10 @@ func (h *Handler) HandleBatchIngest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	for _, e := range evts {
+		h.broadcastEvent(r.Context(), e)
+	}
+
 	telemetry.EventsIngestedTotal.WithLabelValues("success").Add(float64(len(evts)))
 	api.WriteJSON(w, http.StatusAccepted, batchIngestResponse{Count: len(evts), Status: "queued"})
 }
@@ -189,4 +220,23 @@ func toFieldErrors(errs []ValidationError) []api.FieldError {
 		out[i] = api.FieldError{Field: ve.Field, Message: ve.Message}
 	}
 	return out
+}
+
+func (h *Handler) broadcastEvent(ctx context.Context, e *Event) {
+	if h.broadcaster == nil {
+		return
+	}
+	evt := sseEvent{
+		ID:         e.ID,
+		Event:      e.Event,
+		UserID:     e.UserID,
+		Properties: e.Properties,
+		Timestamp:  e.Timestamp.Format(time.RFC3339),
+		ReceivedAt: e.ReceivedAt.Format(time.RFC3339),
+	}
+	payload, err := json.Marshal(evt)
+	if err != nil {
+		return
+	}
+	h.broadcaster.Broadcast(ctx, "events:"+e.ProjectID, string(payload))
 }

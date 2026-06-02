@@ -13,6 +13,7 @@ import (
 	"github.com/matangi/eventpulse/internal/events"
 	"github.com/matangi/eventpulse/internal/health"
 	"github.com/matangi/eventpulse/internal/queue"
+	"github.com/matangi/eventpulse/internal/sse"
 	"github.com/matangi/eventpulse/internal/telemetry"
 	"github.com/matangi/eventpulse/internal/webhooks"
 )
@@ -23,6 +24,7 @@ func NewRouter(
 	analyticsHandler *analytics.Handler,
 	queueStatsHandler *queue.StatsHandler,
 	webhookHandler *webhooks.Handler,
+	sseHandler *sse.Handler,
 	authMW func(http.Handler) http.Handler,
 	rlMW func(http.Handler) http.Handler,
 ) http.Handler {
@@ -53,6 +55,9 @@ func NewRouter(
 
 		// Admin endpoints: auth-protected but exempt from per-key rate limiting.
 		r.Get("/admin/queue/stats", queueStatsHandler.HandleQueueStats)
+
+		// SSE stream: auth-protected but exempt from rate limiting (long-lived connection).
+		r.Get("/projects/{projectID}/stream", sseHandler.Handle)
 
 		r.Group(func(r chi.Router) {
 			r.Use(rlMW)

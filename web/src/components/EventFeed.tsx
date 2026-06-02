@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useEventSource } from '@/hooks/useEventSource'
 import { usePolledResource } from '@/hooks/usePolledResource'
-import { listEvents, type EventRow, type EventsResponse } from '@/lib/api'
+import { listEvents, sseEventsUrl, type EventRow, type EventsResponse } from '@/lib/api'
+import { DEMO_PROJECT_ID } from '@/lib/constants'
 import { formatEventName } from '@/lib/format'
 import { eventColor } from '@/lib/eventColors'
 import { EventFilters } from './EventFilters'
@@ -8,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-const POLL_MS = 3_000
+const INITIAL_LIMIT = 50
 
 function timeAgo(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -91,22 +93,27 @@ export function EventFeed() {
   const [userIdFilter, setUserIdFilter] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
-  const fetcher = useCallback(
-    () =>
-      listEvents({ limit: 20, event: eventFilter || undefined, user_id: userIdFilter || undefined }),
-    [eventFilter, userIdFilter],
+  // Fetch initial events once on mount to seed the SSE ring buffer.
+  const initialFetcher = useCallback(
+    () => listEvents({ limit: INITIAL_LIMIT }),
+    [],
   )
+  const { data: initialData } = usePolledResource<EventsResponse>(initialFetcher, 0)
+  const seedEvents = useMemo(() => initialData?.events ?? [], [initialData])
 
-  const { data: response, status, refetch } = usePolledResource<EventsResponse>(fetcher, POLL_MS)
+  const sseUrl = sseEventsUrl(DEMO_PROJECT_ID)
+  const { events: allEvents, status } = useEventSource(sseUrl, seedEvents)
 
-  const isFirstFilterRender = useRef(true)
-  useEffect(() => {
-    if (isFirstFilterRender.current) {
-      isFirstFilterRender.current = false
-      return
-    }
-    refetch()
-  }, [eventFilter, userIdFilter, refetch])
+  // Client-side filtering of the ring buffer.
+  const events = useMemo(
+    () =>
+      allEvents.filter(
+        (e) =>
+          (!eventFilter || e.event.toLowerCase().includes(eventFilter.toLowerCase())) &&
+          (!userIdFilter || (e.user_id ?? '').toLowerCase().includes(userIdFilter.toLowerCase())),
+      ),
+    [allEvents, eventFilter, userIdFilter],
+  )
 
   const handleToggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -121,8 +128,24 @@ export function EventFeed() {
     setUserIdFilter(userId)
   }, [])
 
-  const events = response?.events ?? []
-  const total = response?.total ?? 0
+  // Poll fallback — only when SSE is in error state so the feed stays alive.
+  const fallbackFetcher = useCallback(
+    () => listEvents({ limit: 20, event: eventFilter || undefined, user_id: userIdFilter || undefined }),
+    [eventFilter, userIdFilter],
+  )
+  const fallbackActive = status === 'error'
+  const { data: fallbackData } = usePolledResource<EventsResponse>(
+    fallbackFetcher,
+    fallbackActive ? 3_000 : 0,
+  )
+
+  const displayEvents = fallbackActive && fallbackData
+    ? fallbackData.events.filter(
+        (e) =>
+          (!eventFilter || e.event.toLowerCase().includes(eventFilter.toLowerCase())) &&
+          (!userIdFilter || (e.user_id ?? '').toLowerCase().includes(userIdFilter.toLowerCase())),
+      )
+    : events
 
   return (
     <Card>
@@ -132,13 +155,18 @@ export function EventFeed() {
             Live Feed
           </CardTitle>
           <div className="flex items-center gap-2">
-            {total > 0 && (
-              <span className="text-xs tabular-nums text-muted-foreground/50">{events.length}/{total}</span>
+            {displayEvents.length > 0 && (
+              <span className="text-xs tabular-nums text-muted-foreground/50">
+                {displayEvents.length}
+              </span>
             )}
             {status === 'error' && (
               <span className="text-xs text-amber-500" role="status" aria-label="stale">
                 stale
               </span>
+            )}
+            {status === 'connecting' && (
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" aria-label="connecting" />
             )}
           </div>
         </div>
@@ -153,14 +181,14 @@ export function EventFeed() {
 
         <ScrollArea className="h-72">
           <div className="space-y-1.5 pr-3">
-            {events.length === 0 ? (
+            {displayEvents.length === 0 ? (
               <p className="py-4 text-center text-xs text-muted-foreground">
                 {eventFilter || userIdFilter
                   ? 'No events match the current filters'
                   : 'No events yet — send one on the left'}
               </p>
             ) : (
-              events.map((evt) => (
+              displayEvents.map((evt) => (
                 <EventItem
                   key={evt.id}
                   evt={evt}
