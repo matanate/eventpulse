@@ -73,7 +73,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Send an initial comment to confirm the connection is open.
-	fmt.Fprintf(w, ": connected\n\n")
+	_, _ = fmt.Fprintf(w, ": connected\n\n")
 	flusher.Flush()
 
 	ch := pubsub.Channel(redis.WithChannelSize(pubSubBufSize))
@@ -86,7 +86,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", msg.Payload)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg.Payload)
 			flusher.Flush()
 		}
 	}
