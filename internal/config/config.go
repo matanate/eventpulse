@@ -22,6 +22,12 @@ type Config struct {
 	DBMaxConns        int
 	DBMinConns        int
 	OTELEndpoint      string // optional: OTLP HTTP endpoint (e.g. http://jaeger:4318); empty disables tracing
+
+	// Webhook dispatcher tunables — all optional with safe defaults.
+	WebhookPollInterval time.Duration
+	WebhookBatchSize    int
+	WebhookHTTPTimeout  time.Duration
+	WebhookMinInterval  time.Duration // minimum delay between delivery attempts per subscription
 }
 
 func Load() (*Config, error) {
@@ -39,6 +45,11 @@ func Load() (*Config, error) {
 		DBMaxConns:        getInt("DB_MAX_CONNS", 25),
 		DBMinConns:        getInt("DB_MIN_CONNS", 5),
 		OTELEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+
+		WebhookPollInterval: getDuration("WEBHOOK_POLL_INTERVAL", time.Second),
+		WebhookBatchSize:    clamp(getInt("WEBHOOK_BATCH_SIZE", 50), 1, 500),
+		WebhookHTTPTimeout:  getDuration("WEBHOOK_HTTP_TIMEOUT", 10*time.Second),
+		WebhookMinInterval:  getDuration("WEBHOOK_MIN_INTERVAL", time.Second),
 	}
 
 	var missing []string
@@ -88,4 +99,14 @@ func getInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func clamp(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
