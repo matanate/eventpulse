@@ -1,0 +1,681 @@
+openapi: "3.1.0"
+info:
+  title: EventPulse API
+  version: "1.0.0"
+  description: |
+    EventPulse is a high-throughput event ingestion and analytics backend.
+    Client applications POST events to the ingestion API, which validates,
+    rate-limits, and enqueues them. A worker service persists events to
+    PostgreSQL and updates aggregate counters. Analytics endpoints surface
+    the stored data.
+
+    **Authentication**: Send `Authorization: Bearer <api_key>` on all `/v1` routes.
+    API keys are prefixed with `epk_`.
+
+servers:
+  - url: https://ingestion-api-production-137c.up.railway.app
+    description: Production (Railway)
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: health
+    description: Liveness and readiness probes
+  - name: ingestion
+    description: Event ingestion endpoints (authenticated, rate-limited)
+  - name: analytics
+    description: Analytics query endpoints (authenticated)
+  - name: admin
+    description: Operational monitoring endpoints (authenticated)
+  - name: docs
+    description: API documentation endpoints (public)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "epk_<hex>"
+      description: API key issued per project. Prefix must be `epk_`.
+
+  schemas:
+    ValidationError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: event
+        message:
+          type: string
+          example: "event name is required"
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Human-readable description
+          example: "validation failed"
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+
+    Event:
+      type: object
+      required: [event]
+      properties:
+        event:
+          type: string
+          maxLength: 255
+          example: page_viewed
+          description: Event name (snake_case recommended)
+        user_id:
+          type: string
+          maxLength: 255
+          example: user_42
+          description: Identifier for the actor who triggered the event
+        properties:
+          type: object
+          additionalProperties: true
+          maxProperties: 50
+          description: Arbitrary key-value metadata (≤50 keys, ≤4 KiB encoded)
+          example:
+            page: "/pricing"
+            referrer: "google"
+        idempotency_key:
+          type: string
+          format: uuid
+          description: |
+            UUID v4 used for deduplication. The `Idempotency-Key` request header
+            takes precedence over this body field when both are present.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        timestamp:
+          type: string
+          format: date-time
+          description: |
+            Event time (ISO 8601 / RFC 3339). Defaults to server receive time.
+            Must be within 24 h past or 1 min future.
+          example: "2024-06-01T12:00:00Z"
+
+    EventRow:
+      type: object
+      required: [id, event, timestamp, received_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        event:
+          type: string
+          example: page_viewed
+        user_id:
+          type: string
+          example: user_42
+        properties:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+
+    EventCount:
+      type: object
+      required: [event, count]
+      properties:
+        event:
+          type: string
+          example: page_viewed
+        count:
+          type: integer
+          example: 1024
+
+    StatsResponse:
+      type: object
+      required: [total_events, today_count, top_events]
+      properties:
+        total_events:
+          type: integer
+          description: Lifetime event count for the project
+          example: 50000
+        today_count:
+          type: integer
+          description: Events ingested today (UTC)
+          example: 320
+        top_events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventCount"
+
+    EventsListResponse:
+      type: object
+      required: [events, total, limit, offset]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventRow"
+        total:
+          type: integer
+          description: Total matching events (before pagination)
+          example: 5000
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    TopEventsResponse:
+      type: object
+      required: [events, n]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventCount"
+        n:
+          type: integer
+          description: Number of top events requested
+          example: 10
+
+    QueueStatsResponse:
+      type: object
+      required: [pending_messages, dead_letter_count]
+      properties:
+        pending_messages:
+          type: integer
+          description: Number of un-ACKed messages in the Redis stream
+          example: 42
+        dead_letter_count:
+          type: integer
+          description: Dead-lettered events for the caller's project
+          example: 0
+
+    BatchResponse:
+      type: object
+      required: [count, status]
+      properties:
+        count:
+          type: integer
+          description: Number of events accepted
+          example: 25
+        status:
+          type: string
+          example: accepted
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      description: Always returns 200 OK. Used by load balancers to verify the process is alive.
+      operationId: healthz
+      responses:
+        "200":
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /readyz:
+    get:
+      tags: [health]
+      summary: Readiness probe
+      description: |
+        Returns 200 OK when Postgres and Redis are reachable.
+        Returns 503 when either dependency is unavailable.
+      operationId: readyz
+      responses:
+        "200":
+          description: All dependencies healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "503":
+          description: One or more dependencies unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unavailable
+
+  /openapi.json:
+    get:
+      tags: [docs]
+      summary: OpenAPI 3.1 spec
+      description: Returns the full OpenAPI specification as JSON. No authentication required.
+      operationId: getOpenAPISpec
+      responses:
+        "200":
+          description: OpenAPI specification
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /docs:
+    get:
+      tags: [docs]
+      summary: Interactive API reference
+      description: |
+        Serves the Scalar API reference UI. Opens in-browser with a live try-it-out
+        panel pointed at the production server. No authentication required.
+      operationId: getDocs
+      responses:
+        "200":
+          description: HTML page embedding the Scalar UI
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /v1/events:
+    post:
+      tags: [ingestion]
+      summary: Ingest a single event
+      description: |
+        Validates the event payload, applies per-key rate limiting, and enqueues
+        the event to Redis Streams. Returns 202 Accepted immediately; persistence
+        is handled asynchronously by the worker.
+
+        **Idempotency**: Include an `Idempotency-Key: <uuid>` header to guarantee
+        at-most-one insertion. Duplicate requests with the same key return 202 and
+        are silently dropped at the DB layer (project-scoped, permanent dedup window).
+      operationId: ingestEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: |
+            UUID v4 deduplication key. Takes precedence over the `idempotency_key`
+            body field when both are present.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+            example:
+              event: page_viewed
+              user_id: user_42
+              properties:
+                page: "/pricing"
+      responses:
+        "202":
+          description: Event accepted and enqueued
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/events/batch:
+    post:
+      tags: [ingestion]
+      summary: Ingest a batch of events
+      description: |
+        Accepts up to 100 events in a single request. Each event is validated
+        independently; the entire batch is rejected if any event is invalid.
+        Returns the count of accepted events.
+      operationId: ingestBatch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 100
+                  items:
+                    $ref: "#/components/schemas/Event"
+            example:
+              events:
+                - event: page_viewed
+                  user_id: user_1
+                - event: button_clicked
+                  user_id: user_2
+                  properties:
+                    button: "sign_up_cta"
+      responses:
+        "202":
+          description: Batch accepted and enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/admin/queue/stats:
+    get:
+      tags: [admin]
+      summary: Queue depth and dead-letter count
+      description: |
+        Returns the current Redis Streams pending-message count (global) and the
+        dead-letter event count scoped to the caller's project. Useful for
+        monitoring pipeline health without a full Prometheus scrape.
+      operationId: getQueueStats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Queue statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueStatsResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Queue unavailable (Redis unreachable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/stats:
+    get:
+      tags: [analytics]
+      summary: Project-level event statistics
+      description: |
+        Returns lifetime total events, today's event count (UTC), and the top
+        events by aggregate daily count. The `projectID` in the URL must match the
+        project associated with the bearer token.
+      operationId: getStats
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Project UUID
+      responses:
+        "200":
+          description: Aggregated statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Project ID does not match the authenticated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/events:
+    get:
+      tags: [analytics]
+      summary: List events for a project
+      description: |
+        Returns a paginated list of raw events for the project, newest first.
+        Supports filtering by event name, user ID, and time range.
+      operationId: listEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 1000
+          description: Maximum number of events to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Pagination offset
+        - name: event
+          in: query
+          schema:
+            type: string
+          description: Filter by exact event name
+          example: page_viewed
+        - name: user_id
+          in: query
+          schema:
+            type: string
+          description: Filter by user ID
+          example: user_42
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Return events at or after this ISO 8601 timestamp
+          example: "2024-06-01T00:00:00Z"
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Return events before this ISO 8601 timestamp
+      responses:
+        "200":
+          description: Paginated event list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventsListResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/events/top:
+    get:
+      tags: [analytics]
+      summary: Top events by count
+      description: |
+        Returns the N most frequent events in descending order, optionally
+        filtered to a date range. Counts are sourced from the
+        `daily_event_counts` aggregate table, not from raw events.
+      operationId: getTopEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: n
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+          description: Number of top events to return
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: "Start date (YYYY-MM-DD or RFC 3339)"
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: "End date (YYYY-MM-DD or RFC 3339)"
+      responses:
+        "200":
+          description: Top events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopEventsResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/users/{userID}/events:
+    get:
+      tags: [analytics]
+      summary: Events for a specific user
+      description: |
+        Returns the most recent events attributed to the given user within the
+        project, newest first. Useful for user-level drill-down in the dashboard.
+      operationId: listUserEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+          example: user_42
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 1000
+          description: Maximum events to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: User event list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventsListResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

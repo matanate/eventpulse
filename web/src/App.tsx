@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { API_BASE_URL } from './lib/constants'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ConnectionBanner } from './components/ConnectionBanner'
 import { EventSender } from './components/EventSender'
@@ -40,10 +41,18 @@ export default function App() {
           <span className="text-muted-foreground/30">/</span>
           <span className="text-sm text-muted-foreground">live demo</span>
           <a
-            href="https://github.com/matanate/eventpulse"
+            href={`${API_BASE_URL}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+          >
+            API Docs →
+          </a>
+          <a
+            href="https://github.com/matanate/eventpulse"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
           >
             GitHub →
           </a>
