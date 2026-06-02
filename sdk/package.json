@@ -1,0 +1,16 @@
+{
+  "name": "@eventpulse/client",
+  "version": "0.1.0",
+  "description": "TypeScript client SDK for EventPulse — auto-batching, idempotency, and retry.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.7",
+    "vitest": "^4.1.7"
+  }
+}
