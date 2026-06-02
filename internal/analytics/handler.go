@@ -196,6 +196,41 @@ func (h *Handler) HandleFunnel(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) HandleRetention(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := scopeCheck(w, r)
+	if !ok {
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "day"
+	}
+	if period != "day" {
+		api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", `period must be "day"`)
+		return
+	}
+
+	cohorts := queryInt(r, "cohorts", defaultCohorts, maxCohorts)
+	if cohorts < 1 {
+		cohorts = 1
+	}
+
+	queryCtx, queryCancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer queryCancel()
+
+	result, err := Retention(queryCtx, h.pool, projectID, RetentionParams{
+		Period:  period,
+		Cohorts: cohorts,
+	})
+	if err != nil {
+		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+
+	api.WriteJSON(w, http.StatusOK, result)
+}
+
 // contextWithFunnelTimeout wraps ctx with a 10-second deadline for the funnel query.
 // Funnel queries involve N-1 self-joins and can be significantly heavier than other analytics queries.
 func contextWithFunnelTimeout(ctx context.Context) (context.Context, context.CancelFunc) {

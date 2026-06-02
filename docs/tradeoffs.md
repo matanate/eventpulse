@@ -161,7 +161,45 @@ The `(project_id, user_id, timestamp DESC) WHERE user_id IS NOT NULL` index supp
 
 ---
 
-## 6. Scaling Paths
+## 6. Retention / Cohort Analysis
+
+**Context**
+
+A retention heatmap groups users into cohorts by the first day they appear, then tracks how many of those users returned on each subsequent day. The challenge is doing this efficiently without full table scans on `events`.
+
+**Rollup strategy: `daily_active_users`**
+
+Rather than computing "first seen" and "returned" directly from the `events` table (which grows unboundedly), the worker upserts one row per `(project_id, date, user_id)` into `daily_active_users` after each event. This is an `INSERT ON CONFLICT DO NOTHING` — idempotent and O(1) per event.
+
+The retention query then runs against this rollup table, which has O(users × days) rows — dramatically smaller than `events`. At 1,000 daily active users and 90 days, that is ≤ 90,000 rows. The same query against `events` at 100k events/day would scan millions of rows.
+
+**SQL shape**
+
+The query uses three CTEs:
+
+1. `first_seen` — for each `user_id`, the minimum date within the observation window. This is the cohort assignment.
+2. `cohort_sizes` — count of users per cohort date.
+3. `retention_counts` — for each user, join back to `daily_active_users` for every day they were active at or after their cohort date.
+
+The `(project_id, user_id, date)` secondary index on `daily_active_users` makes the `first_seen` aggregation and the return-day join efficient. The primary key `(project_id, date, user_id)` supports the cohort-size count.
+
+**Triangular output**
+
+The matrix is intentionally triangular: a cohort from 5 days ago can have at most 5 day-buckets (D+0 through D+4). The response only includes buckets for days that have elapsed — there are no placeholder entries for future periods. Consumers must account for the varying bucket count per row when rendering.
+
+**Cohort definition: "first seen within window"**
+
+A user is assigned to the cohort of their first appearance within the observation window `[today - (cohorts-1), today]`. A user who was active before the window opened will appear in the earliest cohort of the window — this is a standard product analytics convention. It means "new user cohorts" in the strictest sense require a full-history lookback, which this endpoint deliberately avoids to keep queries bounded.
+
+**Caps and exclusions**
+
+- Maximum 12 cohorts (days) per request: keeps the query bounded; the `retention_counts` JOIN processes at most `12 × cohort_size` row pairs.
+- Anonymous events (`NULL user_id`) are excluded: retention is a user-centric metric; there is no identity to track across days.
+- `period=week` is not yet implemented: daily cohorts cover most dashboard use cases; weekly would require date-truncation arithmetic changes but the rollup table already supports it.
+
+---
+
+## 7. Scaling Paths
 
 **Current architecture is single-instance by design** — one API process, one worker process. Here is how each bottleneck scales horizontally.
 

@@ -64,6 +64,7 @@ func NewRouter(
 				r.Get("/events", analyticsHandler.HandleListEvents)
 				r.Get("/events/top", analyticsHandler.HandleTopEvents)
 				r.Post("/funnels", analyticsHandler.HandleFunnel)
+				r.Get("/retention", analyticsHandler.HandleRetention)
 				r.Route("/users/{userID}", func(r chi.Router) {
 					r.Get("/events", analyticsHandler.HandleUserEvents)
 				})

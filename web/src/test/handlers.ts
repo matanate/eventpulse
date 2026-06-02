@@ -85,6 +85,48 @@ export const handlers = [
     }),
   ),
 
+  // GET /v1/projects/:id/retention
+  http.get(`${BASE}/v1/projects/${PROJECT_ID}/retention`, () =>
+    HttpResponse.json({
+      period: 'day',
+      cohorts: 4,
+      rows: [
+        {
+          cohort_date: '2026-05-31',
+          cohort_size: 1,
+          buckets: [{ offset: 0, count: 1, rate: 1.0 }],
+        },
+        {
+          cohort_date: '2026-05-30',
+          cohort_size: 2,
+          buckets: [
+            { offset: 0, count: 2, rate: 1.0 },
+            { offset: 1, count: 1, rate: 0.5 },
+          ],
+        },
+        {
+          cohort_date: '2026-05-29',
+          cohort_size: 4,
+          buckets: [
+            { offset: 0, count: 4, rate: 1.0 },
+            { offset: 1, count: 3, rate: 0.75 },
+            { offset: 2, count: 2, rate: 0.5 },
+          ],
+        },
+        {
+          cohort_date: '2026-05-28',
+          cohort_size: 5,
+          buckets: [
+            { offset: 0, count: 5, rate: 1.0 },
+            { offset: 1, count: 4, rate: 0.8 },
+            { offset: 2, count: 3, rate: 0.6 },
+            { offset: 3, count: 2, rate: 0.4 },
+          ],
+        },
+      ],
+    }),
+  ),
+
   // POST /v1/projects/:id/funnels
   http.post(`${BASE}/v1/projects/${PROJECT_ID}/funnels`, () =>
     HttpResponse.json({
