@@ -17,6 +17,12 @@ import (
 	"github.com/matangi/eventpulse/internal/telemetry"
 )
 
+// SchemaValidator validates event properties against a registered JSON Schema.
+// It mirrors schemas.Validator to avoid an import cycle.
+type SchemaValidator interface {
+	Validate(ctx context.Context, projectID, eventName string, properties map[string]any) (violations []string, enforce bool, err error)
+}
+
 // Broadcaster is an optional hook for broadcasting events to real-time subscribers
 // (e.g. SSE connections) after successful ingestion.
 type Broadcaster interface {
@@ -24,9 +30,10 @@ type Broadcaster interface {
 }
 
 type Handler struct {
-	pub         Publisher
-	pool        *pgxpool.Pool // optional: if set, events are written directly to DB for immediate feed visibility
-	broadcaster Broadcaster   // optional: if set, events are published to real-time channel after ingest
+	pub             Publisher
+	pool            *pgxpool.Pool    // optional: direct DB write for immediate feed visibility
+	broadcaster     Broadcaster      // optional: SSE pub/sub after ingest
+	schemaValidator SchemaValidator  // optional: JSON Schema validation on properties
 }
 
 // NewHandler creates an event handler. Pass a non-nil pool to enable direct
@@ -39,6 +46,13 @@ func NewHandler(pub Publisher, pool *pgxpool.Pool) *Handler {
 // WithBroadcaster attaches a real-time broadcaster (SSE pub/sub).
 func (h *Handler) WithBroadcaster(b Broadcaster) *Handler {
 	h.broadcaster = b
+	return h
+}
+
+// WithSchemaValidator attaches a JSON Schema validator. Properties are checked
+// against any registered schema after structural validation passes.
+func (h *Handler) WithSchemaValidator(v SchemaValidator) *Handler {
+	h.schemaValidator = v
 	return h
 }
 
@@ -104,6 +118,10 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 
 	if errs := e.Validate(); len(errs) > 0 {
 		api.WriteValidationError(w, toFieldErrors(errs))
+		return
+	}
+
+	if rejected := h.checkSchema(w, r, projectID, e); rejected {
 		return
 	}
 
@@ -176,6 +194,12 @@ func (h *Handler) HandleBatchIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, e := range evts {
+		if rejected := h.checkSchema(w, r, projectID, e); rejected {
+			return
+		}
+	}
+
 	if err := h.pub.PublishBatch(r.Context(), evts); err != nil {
 		telemetry.EventsIngestedTotal.WithLabelValues("error").Add(float64(len(evts)))
 		api.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
@@ -220,6 +244,39 @@ func toFieldErrors(errs []ValidationError) []api.FieldError {
 		out[i] = api.FieldError{Field: ve.Field, Message: ve.Message}
 	}
 	return out
+}
+
+// checkSchema validates e.Properties against any registered JSON Schema.
+// Returns true if the request was rejected (response already written).
+// Warn-mode violations are logged and metered but do not reject.
+func (h *Handler) checkSchema(w http.ResponseWriter, r *http.Request, projectID string, e *Event) (rejected bool) {
+	if h.schemaValidator == nil {
+		return false
+	}
+	violations, enforce, err := h.schemaValidator.Validate(r.Context(), projectID, e.Event, e.Properties)
+	if err != nil {
+		slog.Warn("schema validator error", "err", err, "event", e.Event)
+		return false
+	}
+	if len(violations) == 0 {
+		return false
+	}
+	if enforce {
+		telemetry.SchemaViolationsTotal.WithLabelValues(projectID, e.Event, "enforce").Inc()
+		details := make([]api.FieldError, len(violations))
+		for i, v := range violations {
+			details[i] = api.FieldError{Field: "properties", Message: v}
+		}
+		api.WriteJSON(w, http.StatusUnprocessableEntity, api.ErrorResponse{
+			Error:   "event properties failed schema validation",
+			Code:    "SCHEMA_VIOLATION",
+			Details: details,
+		})
+		return true
+	}
+	telemetry.SchemaViolationsTotal.WithLabelValues(projectID, e.Event, "warn").Inc()
+	slog.Warn("schema violation (warn mode)", "event", e.Event, "violations", violations)
+	return false
 }
 
 func (h *Handler) broadcastEvent(ctx context.Context, e *Event) {

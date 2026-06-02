@@ -108,4 +108,10 @@ var (
 		Name: "rate_limiter_circuit_breaker_state",
 		Help: "Circuit breaker state for the Redis rate limiter (0=closed, 1=half-open, 2=open).",
 	})
+
+	// SchemaViolationsTotal counts events whose properties failed JSON Schema validation.
+	SchemaViolationsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "schema_violations_total",
+		Help: "Total events that failed JSON Schema validation, by project, event name, and mode.",
+	}, []string{"project_id", "event", "mode"}) // mode: enforce | warn
 )

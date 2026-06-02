@@ -19,6 +19,7 @@ import (
 	"github.com/matangi/eventpulse/internal/queue"
 	rdb "github.com/matangi/eventpulse/internal/redis"
 	"github.com/matangi/eventpulse/internal/ratelimit"
+	"github.com/matangi/eventpulse/internal/schemas"
 	"github.com/matangi/eventpulse/internal/server"
 	"github.com/matangi/eventpulse/internal/sse"
 	"github.com/matangi/eventpulse/internal/telemetry"
@@ -89,12 +90,18 @@ func main() {
 	broadcaster := sse.NewBroadcaster(redisClient)
 	sseHandler := sse.NewHandler(redisClient)
 
+	schemaStore := schemas.NewStore(pool)
+	schemaValidator := schemas.NewSchemaValidator(schemaStore)
+	schemaHandler := schemas.NewHandler(schemaStore, schemaValidator)
+
 	checker := health.NewChecker(pool, redisClient)
-	eventHandler := events.NewHandler(publisher, pool).WithBroadcaster(broadcaster)
+	eventHandler := events.NewHandler(publisher, pool).
+		WithBroadcaster(broadcaster).
+		WithSchemaValidator(schemaValidator)
 	analyticsHandler := analytics.NewHandler(pool)
 	queueStatsHandler := queue.NewStatsHandler(inspector, pool)
 	webhookHandler := webhooks.NewHandler(pool, cfg.IsDevelopment(), cfg.WebhookSecretKey)
-	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, webhookHandler, sseHandler, authMW, limiter.Middleware())
+	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, webhookHandler, sseHandler, schemaHandler, authMW, limiter.Middleware())
 	// otelhttp is always installed; with the no-op provider it is a thin pass-through.
 	// This ensures incoming traceparent headers create a root span even when no
 	// exporter is configured, allowing child spans to be linked correctly.

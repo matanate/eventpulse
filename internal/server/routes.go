@@ -13,6 +13,7 @@ import (
 	"github.com/matangi/eventpulse/internal/events"
 	"github.com/matangi/eventpulse/internal/health"
 	"github.com/matangi/eventpulse/internal/queue"
+	"github.com/matangi/eventpulse/internal/schemas"
 	"github.com/matangi/eventpulse/internal/sse"
 	"github.com/matangi/eventpulse/internal/telemetry"
 	"github.com/matangi/eventpulse/internal/webhooks"
@@ -25,6 +26,7 @@ func NewRouter(
 	queueStatsHandler *queue.StatsHandler,
 	webhookHandler *webhooks.Handler,
 	sseHandler *sse.Handler,
+	schemaHandler *schemas.Handler,
 	authMW func(http.Handler) http.Handler,
 	rlMW func(http.Handler) http.Handler,
 ) http.Handler {
@@ -77,6 +79,12 @@ func NewRouter(
 				r.Get("/retention", analyticsHandler.HandleRetention)
 				r.Route("/users/{userID}", func(r chi.Router) {
 					r.Get("/events", analyticsHandler.HandleUserEvents)
+				})
+				r.Route("/schemas", func(r chi.Router) {
+					r.Get("/", schemaHandler.HandleList)
+					r.Post("/{event}", schemaHandler.HandleUpsert)
+					r.Get("/{event}", schemaHandler.HandleGet)
+					r.Delete("/{event}", schemaHandler.HandleDelete)
 				})
 			})
 		})
