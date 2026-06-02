@@ -46,15 +46,17 @@ func (m *Middleware) handler(next http.Handler) http.Handler {
 }
 
 func bearerToken(r *http.Request) (string, bool) {
-	h := r.Header.Get("Authorization")
-	if !strings.HasPrefix(h, "Bearer ") {
-		return "", false
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		if token := strings.TrimPrefix(h, "Bearer "); token != "" {
+			return token, true
+		}
 	}
-	token := strings.TrimPrefix(h, "Bearer ")
-	if token == "" {
-		return "", false
+	// Fallback for SSE connections: the browser EventSource API cannot set
+	// custom headers, so the API key is accepted via ?api_key= query param.
+	if key := r.URL.Query().Get("api_key"); key != "" {
+		return key, true
 	}
-	return token, true
+	return "", false
 }
 
 func hashToken(token string) string {

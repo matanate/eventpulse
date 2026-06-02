@@ -20,6 +20,7 @@ import (
 	rdb "github.com/matangi/eventpulse/internal/redis"
 	"github.com/matangi/eventpulse/internal/ratelimit"
 	"github.com/matangi/eventpulse/internal/server"
+	"github.com/matangi/eventpulse/internal/sse"
 	"github.com/matangi/eventpulse/internal/telemetry"
 	"github.com/matangi/eventpulse/internal/tracing"
 	"github.com/matangi/eventpulse/internal/webhooks"
@@ -85,12 +86,15 @@ func main() {
 	publisher := queue.NewStreamPublisher(redisClient)
 	inspector := queue.NewInspector(redisClient)
 
+	broadcaster := sse.NewBroadcaster(redisClient)
+	sseHandler := sse.NewHandler(redisClient)
+
 	checker := health.NewChecker(pool, redisClient)
-	eventHandler := events.NewHandler(publisher, pool)
+	eventHandler := events.NewHandler(publisher, pool).WithBroadcaster(broadcaster)
 	analyticsHandler := analytics.NewHandler(pool)
 	queueStatsHandler := queue.NewStatsHandler(inspector, pool)
 	webhookHandler := webhooks.NewHandler(pool, cfg.IsDevelopment(), cfg.WebhookSecretKey)
-	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, webhookHandler, authMW, limiter.Middleware())
+	router := server.NewRouter(checker, eventHandler, analyticsHandler, queueStatsHandler, webhookHandler, sseHandler, authMW, limiter.Middleware())
 	// otelhttp is always installed; with the no-op provider it is a thin pass-through.
 	// This ensures incoming traceparent headers create a root span even when no
 	// exporter is configured, allowing child spans to be linked correctly.

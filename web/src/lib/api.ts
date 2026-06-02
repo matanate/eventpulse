@@ -259,3 +259,11 @@ export async function getQueueStats(): Promise<QueueStats> {
   if (!res.ok) throw new Error(`queue stats: HTTP ${res.status}`)
   return res.json() as Promise<QueueStats>
 }
+
+/**
+ * Returns the SSE stream URL for a project's event feed.
+ * The API key is passed as a query param because EventSource cannot set headers.
+ */
+export function sseEventsUrl(projectId: string): string {
+  return `${API_BASE_URL}/v1/projects/${projectId}/stream?api_key=${encodeURIComponent(DEMO_API_KEY)}`
+}

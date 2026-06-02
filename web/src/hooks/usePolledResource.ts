@@ -46,6 +46,12 @@ export function usePolledResource<T>(
     }
 
     void poll()
+
+    // intervalMs === 0 means one-shot: fetch once on mount, no recurring poll.
+    if (intervalMs <= 0) {
+      return () => { cancelled = true }
+    }
+
     const id = setInterval(() => {
       void poll()
     }, intervalMs)
