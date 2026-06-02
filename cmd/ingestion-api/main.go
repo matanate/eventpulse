@@ -56,6 +56,11 @@ func main() {
 	}
 	defer pool.Close()
 
+	if err := db.Migrate(cfg.DatabaseURL); err != nil {
+		slog.Error("migration failed", "err", err)
+		os.Exit(1)
+	}
+
 	redisClient, err := rdb.New(cfg.RedisURL)
 	if err != nil {
 		slog.Error("redis connection failed", "err", err)
