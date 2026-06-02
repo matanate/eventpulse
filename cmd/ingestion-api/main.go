@@ -20,6 +20,7 @@ import (
 	rdb "github.com/matangi/eventpulse/internal/redis"
 	"github.com/matangi/eventpulse/internal/ratelimit"
 	"github.com/matangi/eventpulse/internal/server"
+	"github.com/matangi/eventpulse/internal/telemetry"
 	"github.com/matangi/eventpulse/internal/tracing"
 	"github.com/matangi/eventpulse/internal/webhooks"
 )
@@ -71,6 +72,9 @@ func main() {
 			slog.Error("redis close error", "err", err)
 		}
 	}()
+
+	telemetry.StartDBPoolCollector(ctx, pool)
+	telemetry.StartRedisPoolCollector(ctx, redisClient)
 
 	authMW := auth.NewMiddleware(pool)
 	limiter := ratelimit.NewLimiter(redisClient, ratelimit.Config{

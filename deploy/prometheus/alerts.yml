@@ -1,0 +1,57 @@
+groups:
+  - name: eventpulse.queue
+    rules:
+      - alert: HighQueueLag
+        expr: queue_lag > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis stream queue lag is high"
+          description: "queue_lag={{ $value }} — ingestion is outpacing the worker for more than 5 minutes. Check worker logs for processing errors or resource exhaustion."
+
+      - alert: DeadLetterRateNonZero
+        expr: increase(events_processed_total{status="dead_letter"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Events are being dead-lettered"
+          description: "{{ $value }} events moved to dead_letter in the last 5 minutes. Inspect dead_letter_events table for payload or schema issues."
+
+  - name: eventpulse.api
+    rules:
+      - alert: High5xxErrorRate
+        expr: |
+          sum(rate(events_ingested_total{status="error"}[5m]))
+          /
+          sum(rate(events_ingested_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ingestion API error rate exceeds 1% SLO"
+          description: "Error rate={{ $value | humanizePercentage }} — availability SLO (99%) is breaching. Check database connectivity and application logs."
+
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(api_request_duration_seconds_bucket[5m])) by (le)
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p99 latency exceeds 200ms SLO"
+          description: "p99={{ $value | humanizeDuration }} — latency SLO (p99 < 200ms) is breaching. Check Redis rate-limiter and database query performance."
+
+  - name: eventpulse.ratelimiter
+    rules:
+      - alert: RateLimiterCircuitBreakerOpen
+        expr: rate_limiter_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rate-limiter circuit breaker is open"
+          description: "The rate-limiter circuit breaker has been open for more than 1 minute. Redis may be unavailable. Requests are being {{ if eq (rate_limiter_circuit_breaker_state) 2.0 }}allowed through (fail-open){{ else }}rejected (fail-closed){{ end }}."

@@ -37,31 +37,61 @@ redis.call('PEXPIRE', key, window)
 return {0, 0}
 `)
 
+// FailMode controls what happens when Redis is unavailable.
+type FailMode int
+
+const (
+	// FailClosed rejects requests when Redis is unavailable (default, safe).
+	FailClosed FailMode = iota
+	// FailOpen allows requests through when Redis is unavailable (high-availability preference).
+	FailOpen
+)
+
 // Config holds rate limit parameters.
 type Config struct {
-	Limit  int
-	Window time.Duration
+	Limit    int
+	Window   time.Duration
+	FailMode FailMode // default FailClosed
 }
 
-// Limiter is a Redis-backed sliding-window rate limiter.
+// Limiter is a Redis-backed sliding-window rate limiter with a circuit breaker
+// that trips after 3 consecutive Redis failures and resets after 10 seconds.
 type Limiter struct {
-	rdb    *redis.Client
-	limit  int
-	window time.Duration
+	rdb      *redis.Client
+	limit    int
+	window   time.Duration
+	failMode FailMode
+	breaker  *circuitBreaker
 }
 
 // NewLimiter creates a Limiter with the given config.
 func NewLimiter(rdb *redis.Client, cfg Config) *Limiter {
-	return &Limiter{
-		rdb:    rdb,
-		limit:  cfg.Limit,
-		window: cfg.Window,
+	l := &Limiter{
+		rdb:      rdb,
+		limit:    cfg.Limit,
+		window:   cfg.Window,
+		failMode: cfg.FailMode,
 	}
+	l.breaker = newCircuitBreaker(func(state int32) {
+		telemetry.RateLimiterCircuitBreakerState.Set(float64(state))
+	})
+	return l
 }
 
 // Allow checks whether the given keyID is within the rate limit.
 // Returns allowed=false and a retryAfter duration when the limit is exceeded.
+// On Redis errors, behaviour depends on FailMode:
+//   - FailClosed (default): returns an error, causing the middleware to 500.
+//   - FailOpen: returns allowed=true so requests pass through unthrottled.
 func (l *Limiter) Allow(ctx context.Context, keyID string) (allowed bool, retryAfter time.Duration, err error) {
+	if !l.breaker.allow() {
+		// Circuit is open — Redis is (likely) down.
+		if l.failMode == FailOpen {
+			return true, 0, nil
+		}
+		return false, 0, fmt.Errorf("rate limiter circuit open")
+	}
+
 	now := time.Now()
 	nowMS := now.UnixMilli()
 	windowMS := l.window.Milliseconds()
@@ -72,8 +102,14 @@ func (l *Limiter) Allow(ctx context.Context, keyID string) (allowed bool, retryA
 		nowMS, windowMS, l.limit, member,
 	).Int64Slice()
 	if err != nil {
+		l.breaker.recordFailure()
+		if l.failMode == FailOpen {
+			return true, 0, nil
+		}
 		return false, 0, fmt.Errorf("rate limit script: %w", err)
 	}
+
+	l.breaker.recordSuccess()
 
 	if res[0] == 1 {
 		// res[1] is the oldest entry's score in ms

@@ -66,6 +66,9 @@ func main() {
 		}
 	}()
 
+	telemetry.StartDBPoolCollector(ctx, pool)
+	telemetry.StartRedisPoolCollector(ctx, redisClient)
+
 	consumerName := consumerID()
 	consumer, err := queue.NewStreamConsumer(redisClient, consumerName)
 	if err != nil {
