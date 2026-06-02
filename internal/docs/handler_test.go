@@ -15,7 +15,7 @@ func TestHandleSpec(t *testing.T) {
 	HandleSpec(w, req)
 
 	res := w.Result()
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", res.StatusCode)

@@ -84,7 +84,7 @@ func TestHandleIngest_HappyPath(t *testing.T) {
 		"event":   "page_view",
 		"user_id": "u1",
 	}, withProjectID())
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("got %d, want 202", resp.StatusCode)
@@ -102,7 +102,7 @@ func TestHandleIngest_MissingProjectID(t *testing.T) {
 	defer srv.Close()
 
 	resp := postJSON(t, srv, "/v1/events", map[string]any{"event": "test"}, nil)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("got %d, want 401", resp.StatusCode)
 	}
@@ -119,7 +119,7 @@ func TestHandleIngest_InvalidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("got %d, want 400", resp.StatusCode)
 	}
@@ -130,7 +130,7 @@ func TestHandleIngest_EmptyEventName(t *testing.T) {
 	defer srv.Close()
 
 	resp := postJSON(t, srv, "/v1/events", map[string]any{"event": ""}, withProjectID())
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("got %d, want 422", resp.StatusCode)
 	}
@@ -148,7 +148,7 @@ func TestHandleBatchIngest_HappyPath(t *testing.T) {
 			{"event": "batch_c"},
 		},
 	}, withProjectID())
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("got %d, want 202", resp.StatusCode)
@@ -158,7 +158,7 @@ func TestHandleBatchIngest_HappyPath(t *testing.T) {
 	}
 
 	var body map[string]any
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if count, _ := body["count"].(float64); count != 3 {
 		t.Errorf("expected count=3, got %v", body["count"])
 	}
@@ -173,13 +173,13 @@ func TestHandleBatchIngest_TooLarge(t *testing.T) {
 		evts[i] = map[string]any{"event": "e"}
 	}
 	resp := postJSON(t, srv, "/v1/events/batch", map[string]any{"events": evts}, withProjectID())
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("got %d, want 400", resp.StatusCode)
 	}
 	var body map[string]string
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if body["code"] != "BATCH_TOO_LARGE" {
 		t.Errorf("expected BATCH_TOO_LARGE, got %q", body["code"])
 	}
@@ -190,13 +190,13 @@ func TestHandleBatchIngest_Empty(t *testing.T) {
 	defer srv.Close()
 
 	resp := postJSON(t, srv, "/v1/events/batch", map[string]any{"events": []any{}}, withProjectID())
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("got %d, want 400", resp.StatusCode)
 	}
 	var body map[string]string
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if body["code"] != "BATCH_EMPTY" {
 		t.Errorf("expected BATCH_EMPTY, got %q", body["code"])
 	}

@@ -66,7 +66,11 @@ func main() {
 		slog.Error("redis connection failed", "err", err)
 		os.Exit(1)
 	}
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			slog.Error("redis close error", "err", err)
+		}
+	}()
 
 	authMW := auth.NewMiddleware(pool)
 	limiter := ratelimit.NewLimiter(redisClient, ratelimit.Config{
