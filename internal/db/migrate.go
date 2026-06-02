@@ -1,3 +1,14 @@
+// Package db provides database connection and schema management utilities.
+//
+// Migration notes:
+//   - golang-migrate uses lib/pq (not pgx/v5) internally, opening a short-lived
+//     second connection alongside the pgx pool. This is intentional and harmless
+//     as long as DATABASE_URL contains no pgx-specific query parameters
+//     (e.g. pool_max_conns, pool_min_conns). Never append pgx DSN params to the URL.
+//   - Concurrent migrations are serialised via PostgreSQL advisory locks, which
+//     are released automatically if the process dies. However, non-transactional
+//     DDL (e.g. CREATE INDEX CONCURRENTLY) can leave a dirty state on a crash.
+//     Avoid non-transactional DDL in future migration files.
 package db
 
 import (
@@ -34,7 +45,11 @@ func Migrate(databaseURL string) error {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
-	version, _, _ := m.Version()
-	slog.Info("migrations applied", "version", version)
+	version, dirty, verErr := m.Version()
+	if verErr != nil {
+		slog.Info("migrations applied")
+	} else {
+		slog.Info("migrations applied", "version", version, "dirty", dirty)
+	}
 	return nil
 }
