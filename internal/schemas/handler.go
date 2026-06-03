@@ -1,4 +1,4 @@
-﻿package schemas
+package schemas
 
 import (
 	"context"

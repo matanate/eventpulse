@@ -1,4 +1,4 @@
-﻿package sse
+package sse
 
 import (
 	"bufio"

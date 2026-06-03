@@ -1,4 +1,4 @@
-﻿package events_test
+package events_test
 
 import (
 	"strings"

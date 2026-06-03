@@ -1,4 +1,4 @@
-﻿package tracing_test
+package tracing_test
 
 import (
 	"context"

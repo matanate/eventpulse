@@ -1,4 +1,4 @@
-﻿// Package db provides database connection and schema management utilities.
+// Package db provides database connection and schema management utilities.
 //
 // Migration notes:
 //   - golang-migrate uses lib/pq (not pgx/v5) internally, opening a short-lived
