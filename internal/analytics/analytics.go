@@ -60,7 +60,7 @@ func Stats(ctx context.Context, pool *pgxpool.Pool, projectID string) (StatsResu
 
 	if err := pool.QueryRow(ctx,
 		`SELECT COALESCE(SUM(count), 0) FROM daily_event_counts
-		 WHERE project_id = $1 AND date = CURRENT_DATE`, projectID,
+		 WHERE project_id = $1 AND date = (NOW() AT TIME ZONE 'UTC')::date`, projectID,
 	).Scan(&res.TodayCount); err != nil {
 		return StatsResult{}, fmt.Errorf("stats today: %w", err)
 	}
