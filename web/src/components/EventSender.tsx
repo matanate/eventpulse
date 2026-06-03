@@ -93,22 +93,22 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
       if (result.sent > 0) {
         setSentCount((c) => c + 1)
         setFlash('success')
-        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 202, latencyMs })
+        onRequest?.({ method: 'POST', path: '/v1/events', status: 202, latencyMs })
         setTimeout(() => setFlash(null), 1_500)
       } else if (result.rateLimitSeconds !== undefined) {
         setRateLimitSeconds(result.rateLimitSeconds)
-        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 429, latencyMs })
+        onRequest?.({ method: 'POST', path: '/v1/events', status: 429, latencyMs })
       } else {
         setErrorMsg('Failed to send — server error')
         setFlash('error')
-        onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 500, latencyMs })
+        onRequest?.({ method: 'POST', path: '/v1/events', status: 500, latencyMs })
         setTimeout(() => setFlash(null), 3_000)
       }
     } catch {
       const latencyMs = Date.now() - start
       setErrorMsg('Network error — check your connection')
       setFlash('error')
-      onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 0, latencyMs })
+      onRequest?.({ method: 'POST', path: '/v1/events', status: 0, latencyMs })
       setTimeout(() => setFlash(null), 3_000)
     } finally {
       setSendingState(false)

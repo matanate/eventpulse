@@ -58,9 +58,15 @@ func Stats(ctx context.Context, pool *pgxpool.Pool, projectID string) (StatsResu
 		return StatsResult{}, fmt.Errorf("stats total: %w", err)
 	}
 
+	// Count events received today using explicit UTC midnight bounds so the result
+	// is independent of the PostgreSQL session timezone and daily_event_counts state.
+	now := time.Now().UTC()
+	todayStart := now.Truncate(24 * time.Hour)
+	todayEnd := todayStart.Add(24 * time.Hour)
 	if err := pool.QueryRow(ctx,
-		`SELECT COALESCE(SUM(count), 0) FROM daily_event_counts
-		 WHERE project_id = $1 AND date = (NOW() AT TIME ZONE 'UTC')::date`, projectID,
+		`SELECT COUNT(*) FROM events
+		 WHERE project_id = $1 AND received_at >= $2 AND received_at < $3`,
+		projectID, todayStart, todayEnd,
 	).Scan(&res.TodayCount); err != nil {
 		return StatsResult{}, fmt.Errorf("stats today: %w", err)
 	}

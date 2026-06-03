@@ -103,7 +103,7 @@ describe('EventSender — single mode', () => {
     await waitFor(() => expect(onRequest).toHaveBeenCalled())
 
     expect(onRequest).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 202 }),
+      expect.objectContaining({ status: 202, path: '/v1/events' }),
     )
   })
 })
