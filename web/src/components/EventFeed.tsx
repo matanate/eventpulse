@@ -160,13 +160,23 @@ export function EventFeed() {
                 {displayEvents.length}
               </span>
             )}
-            {status === 'error' && (
-              <span className="text-xs text-amber-500" role="status" aria-label="stale">
-                stale
+            {status === 'open' && (
+              <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-500" role="status" aria-label="SSE connected">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                SSE
+              </span>
+            )}
+            {fallbackActive && (
+              <span className="flex items-center gap-1 text-[10px] font-mono text-amber-400" role="status" aria-label="polling fallback">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                polling
               </span>
             )}
             {status === 'connecting' && (
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" aria-label="connecting" />
+              <span className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50" aria-label="connecting">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-pulse" />
+                connecting
+              </span>
             )}
           </div>
         </div>

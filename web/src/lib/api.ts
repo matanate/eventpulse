@@ -267,3 +267,128 @@ export async function getQueueStats(): Promise<QueueStats> {
 export function sseEventsUrl(projectId: string): string {
   return `${API_BASE_URL}/v1/projects/${projectId}/stream?api_key=${encodeURIComponent(DEMO_API_KEY)}`
 }
+
+// ─── Webhook subscriptions ────────────────────────────────────────────────────
+
+export interface Webhook {
+  id: string
+  url: string
+  filter_event?: string
+  active: boolean
+  created_at: string
+}
+
+export async function createWebhook(url: string, secret: string, filterEvent?: string): Promise<Webhook> {
+  const body: Record<string, unknown> = { url, secret }
+  if (filterEvent) body.filter_event = filterEvent
+  const res = await fetch(`${API_BASE_URL}/v1/webhooks`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`create webhook: HTTP ${res.status} ${text}`)
+  }
+  return res.json() as Promise<Webhook>
+}
+
+export async function listWebhooks(): Promise<Webhook[]> {
+  const res = await fetch(`${API_BASE_URL}/v1/webhooks`, { headers: authHeaders() })
+  if (!res.ok) throw new Error(`list webhooks: HTTP ${res.status}`)
+  return res.json() as Promise<Webhook[]>
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/v1/webhooks/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(`delete webhook: HTTP ${res.status}`)
+}
+
+// ─── Schema registry ──────────────────────────────────────────────────────────
+
+export type SchemaMode = 'enforce' | 'warn'
+
+export interface EventSchema {
+  id: string
+  project_id: string
+  event_name: string
+  schema: Record<string, unknown>
+  mode: SchemaMode
+  created_at: string
+  updated_at: string
+}
+
+export async function upsertSchema(
+  eventName: string,
+  schema: Record<string, unknown>,
+  mode: SchemaMode,
+): Promise<EventSchema> {
+  const res = await fetch(
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/schemas/${encodeURIComponent(eventName)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ schema, mode }),
+    },
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`upsert schema: HTTP ${res.status} ${text}`)
+  }
+  return res.json() as Promise<EventSchema>
+}
+
+export async function listSchemas(): Promise<EventSchema[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/schemas`,
+    { headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error(`list schemas: HTTP ${res.status}`)
+  return res.json() as Promise<EventSchema[]>
+}
+
+export async function deleteSchema(eventName: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE_URL}/v1/projects/${DEMO_PROJECT_ID}/schemas/${encodeURIComponent(eventName)}`,
+    {
+      method: 'DELETE',
+      headers: authHeaders(),
+    },
+  )
+  if (!res.ok) throw new Error(`delete schema: HTTP ${res.status}`)
+}
+
+export type SchemaViolationResult =
+  | { ok: true; status: 202 }
+  | { ok: false; status: 422; violations: string[] }
+  | { ok: false; status: 429; retryAfter: number }
+  | { ok: false; status: number; message: string }
+
+export async function postEventWithProperties(
+  event: string,
+  properties: Record<string, unknown>,
+): Promise<SchemaViolationResult> {
+  const res = await fetch(`${API_BASE_URL}/v1/events`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ event, user_id: 'schema_test_demo', properties }),
+  })
+  if (res.status === 202) return { ok: true, status: 202 }
+  if (res.status === 422) {
+    try {
+      const body = await res.json() as { details?: Array<{ message: string }> }
+      const violations = body.details?.map((d) => d.message) ?? ['Schema violation']
+      return { ok: false, status: 422, violations }
+    } catch {
+      return { ok: false, status: 422, violations: ['Schema violation'] }
+    }
+  }
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
+    return { ok: false, status: 429, retryAfter }
+  }
+  return { ok: false, status: res.status, message: `HTTP ${res.status}` }
+}
