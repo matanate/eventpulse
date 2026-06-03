@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package analytics_test
 
@@ -14,8 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/matangi/eventpulse/internal/analytics"
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/analytics"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 // newFunnelTestServer returns a test server with only the funnel route mounted.
@@ -58,7 +58,7 @@ func seedFunnelEvents(t *testing.T) (step0, step1, step2 string) {
 	now := time.Now().UTC()
 
 	// User journeys:
-	//   user_f1..f2: complete all 3 steps  → step0=7, step1=5, step2=2
+	//   user_f1..f2: complete all 3 steps  ג†’ step0=7, step1=5, step2=2
 	//   user_f3..f5: complete step0+step1
 	//   user_f6..f7: complete step0 only
 	journeys := []struct {
@@ -90,7 +90,7 @@ func seedFunnelEvents(t *testing.T) (step0, step1, step2 string) {
 	return
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func TestHandleFunnel_HappyPath(t *testing.T) {
 	step0, step1, step2 := seedFunnelEvents(t)
@@ -131,7 +131,7 @@ func TestHandleFunnel_HappyPath(t *testing.T) {
 		t.Errorf("step0 dropped: want 2, got %d", s0.Dropped)
 	}
 
-	// Verify overall conversion rate ≈ 2/7
+	// Verify overall conversion rate ג‰ˆ 2/7
 	want := float64(2) / float64(7)
 	if result.OverallConversionRate < want-0.001 || result.OverallConversionRate > want+0.001 {
 		t.Errorf("overall rate: want ~%.4f, got %.4f", want, result.OverallConversionRate)

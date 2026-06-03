@@ -1,4 +1,4 @@
-package events_test
+﻿package events_test
 
 import (
 	"bytes"
@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/matangi/eventpulse/internal/auth"
-	"github.com/matangi/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/events"
 )
 
 // fakePublisher captures published events in memory.
@@ -73,7 +73,7 @@ func withProjectID() map[string]string {
 	return map[string]string{"X-Project-ID": testProjectID}
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func TestHandleIngest_HappyPath(t *testing.T) {
 	pub := &fakePublisher{}

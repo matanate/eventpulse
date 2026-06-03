@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package schemas_test
 
@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/matangi/eventpulse/internal/schemas"
+	"github.com/matanate/eventpulse/internal/schemas"
 )
 
 var testPool *pgxpool.Pool
@@ -82,7 +82,7 @@ func seedProject(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	return id, nil
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func TestStore_UpsertAndGet(t *testing.T) {
 	ctx := context.Background()
@@ -125,7 +125,7 @@ func TestStore_Upsert_UpdatesExisting(t *testing.T) {
 		t.Fatalf("second upsert: %v", err)
 	}
 
-	// Same row — IDs match, mode updated.
+	// Same row ג€” IDs match, mode updated.
 	if sc1.ID != sc2.ID {
 		t.Errorf("expected same row id after conflict update, got different ids")
 	}
@@ -199,7 +199,7 @@ func TestStore_List(t *testing.T) {
 	}
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	wd, err := os.Getwd()

@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package queue_test
 
@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/matangi/eventpulse/internal/queue"
+	"github.com/matanate/eventpulse/internal/queue"
 )
 
 // fakeInspector is a test stub that returns a fixed pending count.

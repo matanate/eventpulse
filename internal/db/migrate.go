@@ -1,4 +1,4 @@
-// Package db provides database connection and schema management utilities.
+﻿// Package db provides database connection and schema management utilities.
 //
 // Migration notes:
 //   - golang-migrate uses lib/pq (not pgx/v5) internally, opening a short-lived
@@ -20,11 +20,11 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	"github.com/matangi/eventpulse/migrations"
+	"github.com/matanate/eventpulse/migrations"
 )
 
 // Migrate applies all pending up migrations. It is safe to call on every
-// startup — if no migrations are pending it returns immediately.
+// startup ג€” if no migrations are pending it returns immediately.
 func Migrate(databaseURL string) error {
 	src, err := iofs.New(migrations.FS, ".")
 	if err != nil {

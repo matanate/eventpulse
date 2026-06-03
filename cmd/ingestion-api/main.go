@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -10,21 +10,21 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/matangi/eventpulse/internal/analytics"
-	"github.com/matangi/eventpulse/internal/auth"
-	"github.com/matangi/eventpulse/internal/config"
-	"github.com/matangi/eventpulse/internal/db"
-	"github.com/matangi/eventpulse/internal/events"
-	"github.com/matangi/eventpulse/internal/health"
-	"github.com/matangi/eventpulse/internal/queue"
-	rdb "github.com/matangi/eventpulse/internal/redis"
-	"github.com/matangi/eventpulse/internal/ratelimit"
-	"github.com/matangi/eventpulse/internal/schemas"
-	"github.com/matangi/eventpulse/internal/server"
-	"github.com/matangi/eventpulse/internal/sse"
-	"github.com/matangi/eventpulse/internal/telemetry"
-	"github.com/matangi/eventpulse/internal/tracing"
-	"github.com/matangi/eventpulse/internal/webhooks"
+	"github.com/matanate/eventpulse/internal/analytics"
+	"github.com/matanate/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/config"
+	"github.com/matanate/eventpulse/internal/db"
+	"github.com/matanate/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/health"
+	"github.com/matanate/eventpulse/internal/queue"
+	rdb "github.com/matanate/eventpulse/internal/redis"
+	"github.com/matanate/eventpulse/internal/ratelimit"
+	"github.com/matanate/eventpulse/internal/schemas"
+	"github.com/matanate/eventpulse/internal/server"
+	"github.com/matanate/eventpulse/internal/sse"
+	"github.com/matanate/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/tracing"
+	"github.com/matanate/eventpulse/internal/webhooks"
 )
 
 func main() {

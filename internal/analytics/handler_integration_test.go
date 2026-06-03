@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package analytics_test
 
@@ -19,8 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/matangi/eventpulse/internal/analytics"
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/analytics"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 var (
@@ -75,7 +75,7 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func TestHandleStats(t *testing.T) {
 	srv := newTestServer(testProjectID)
@@ -98,7 +98,7 @@ func TestHandleStats(t *testing.T) {
 }
 
 func TestHandleStats_WrongProject(t *testing.T) {
-	// Auth context has testProjectID but URL has a different project — expect 403.
+	// Auth context has testProjectID but URL has a different project ג€” expect 403.
 	srv := newTestServer(testProjectID)
 	rec := doGet(t, srv, "/v1/projects/00000000-0000-0000-0000-000000000000/stats")
 	if rec.Code != http.StatusForbidden {
@@ -202,7 +202,7 @@ func TestHandleUserEvents(t *testing.T) {
 	}
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 // newTestServer returns an httptest.Server with analytics routes mounted and
 // an auth middleware that injects projectID into every request context.

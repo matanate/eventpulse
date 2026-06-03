@@ -1,4 +1,4 @@
-package webhooks
+﻿package webhooks
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/matangi/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/telemetry"
 )
 
 // Dispatcher polls webhook_deliveries for due rows and delivers them via HTTP.

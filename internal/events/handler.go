@@ -1,4 +1,4 @@
-package events
+﻿package events
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/matangi/eventpulse/internal/api"
-	"github.com/matangi/eventpulse/internal/auth"
-	"github.com/matangi/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/api"
+	"github.com/matanate/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/telemetry"
 )
 
 // SchemaValidator validates event properties against a registered JSON Schema.

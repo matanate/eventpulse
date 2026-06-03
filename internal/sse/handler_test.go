@@ -1,4 +1,4 @@
-package sse
+﻿package sse
 
 import (
 	"bufio"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 // stubHandler replaces the Redis subscription with an in-process channel.

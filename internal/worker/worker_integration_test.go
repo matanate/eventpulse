@@ -1,4 +1,4 @@
-//go:build integration
+﻿//go:build integration
 
 package worker_test
 
@@ -18,9 +18,9 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/matangi/eventpulse/internal/events"
-	"github.com/matangi/eventpulse/internal/queue"
-	"github.com/matangi/eventpulse/internal/worker"
+	"github.com/matanate/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/queue"
+	"github.com/matanate/eventpulse/internal/worker"
 )
 
 var (
@@ -106,7 +106,7 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 // TestWorker_ProcessesEvent publishes an event via StreamPublisher, runs the worker
 // briefly, and verifies the event landed in the events table.
@@ -203,7 +203,7 @@ func TestWorker_DeadLetters_MalformedPayload(t *testing.T) {
 	t.Fatal("dead letter event did not appear within 10s")
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 // newTestComponents creates a StreamPublisher and StreamConsumer backed by a
 // dedicated stream (so tests don't interfere with each other).

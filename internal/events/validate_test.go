@@ -1,11 +1,11 @@
-package events_test
+﻿package events_test
 
 import (
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/matangi/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/events"
 )
 
 func TestValidate(t *testing.T) {
@@ -189,7 +189,7 @@ func TestValidate(t *testing.T) {
 			event: events.Event{
 				Event: "test",
 				Properties: func() map[string]any {
-					// Build a value that brings the total encoding to ≤ 4096 bytes.
+					// Build a value that brings the total encoding to ג‰₪ 4096 bytes.
 					// {"k":"<val>"} base is 8 bytes; pad val to fill up to 4096.
 					val := strings.Repeat("x", 4096-len(`{"k":""}`))
 					return map[string]any{"k": val}
