@@ -4,6 +4,8 @@ import { postEventWithBadKey, postEventDuplicate, type PostEventPayload } from '
 import { API_BASE_URL, DEMO_API_KEY } from '@/lib/constants'
 import { formatEventName } from '@/lib/format'
 import { RateLimitBanner } from './RateLimitBanner'
+import { WebhookPanel } from './WebhookPanel'
+import { SchemaPanel } from './SchemaPanel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,9 +45,6 @@ interface EventSenderProps {
 }
 
 export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
-  // useRef with lazy init avoids the Strict Mode double-timer problem that
-  // useMemo has: React may run the factory twice in dev, creating two intervals.
-  // useRef guarantees a single instance; the effect cleanup stops the timer.
   const clientRef = useRef<EventPulseClient | null>(null)
   if (clientRef.current === null) {
     clientRef.current = new EventPulseClient({
@@ -156,8 +155,6 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     }
   }
 
-  // Demo: send the same event twice with the same Idempotency-Key.
-  // Uses the raw API directly because the SDK generates a fresh key per track() call.
   const handleDuplicateDemo = async () => {
     if (sending) return
     setSendingState(true)
@@ -182,8 +179,6 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
     }
   }
 
-  // Demo: attempt ingestion with an invalid API key to show 401 auth rejection.
-  // Uses the raw API directly because the SDK client is already bound to the demo key.
   const handleAuthFailureDemo = async () => {
     if (sending) return
     setSendingState(true)
@@ -218,12 +213,15 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <Tabs defaultValue="single">
-          <TabsList className="w-full">
-            <TabsTrigger value="single" className="flex-1">Single</TabsTrigger>
-            <TabsTrigger value="batch" className="flex-1">Batch</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="single" className="text-xs">Single</TabsTrigger>
+            <TabsTrigger value="batch" className="text-xs">Batch</TabsTrigger>
+            <TabsTrigger value="webhooks" className="text-xs">Webhooks</TabsTrigger>
+            <TabsTrigger value="schema" className="text-xs">Schema</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="single" className="space-y-3 mt-4">
+          {/* ── Single event ── */}
+          <TabsContent value="single" className="mt-4 space-y-3">
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground" htmlFor="event-type">
                 Event type
@@ -261,7 +259,13 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
               variant={flash === 'error' ? 'destructive' : 'default'}
               className="w-full"
             >
-              {sending ? 'Sending…' : flash === 'success' ? '✓ Sent' : flash === 'idempotent' ? '✓ Sent (×2)' : 'Send Event'}
+              {sending
+                ? 'Sending…'
+                : flash === 'success'
+                  ? '✓ Sent'
+                  : flash === 'idempotent'
+                    ? '✓ Sent (×2)'
+                    : 'Send Event'}
             </Button>
 
             {flash === 'error' && errorMsg && (
@@ -293,7 +297,8 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="batch" className="space-y-3 mt-4">
+          {/* ── Batch events ── */}
+          <TabsContent value="batch" className="mt-4 space-y-3">
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Batch size</label>
               <div className="flex gap-2">
@@ -313,7 +318,8 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Sends {batchCount} random events across all types with random user IDs.
+              Sends {batchCount} random events across all types with random user IDs via the SDK's
+              batch endpoint.
             </p>
 
             <Button
@@ -333,6 +339,16 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
             {batchFlash === 'error' && batchErrorMsg && (
               <p className="text-xs text-destructive" role="alert">{batchErrorMsg}</p>
             )}
+          </TabsContent>
+
+          {/* ── Webhooks ── */}
+          <TabsContent value="webhooks" className="mt-4">
+            <WebhookPanel onRequest={onRequest} />
+          </TabsContent>
+
+          {/* ── Schema registry ── */}
+          <TabsContent value="schema" className="mt-4">
+            <SchemaPanel onRequest={onRequest} />
           </TabsContent>
         </Tabs>
 

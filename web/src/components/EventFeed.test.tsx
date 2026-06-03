@@ -114,14 +114,14 @@ describe('EventFeed', () => {
     expect(screen.getByText(/No events match/)).toBeInTheDocument()
   })
 
-  it('shows stale indicator when SSE status is error', () => {
+  it('shows polling fallback indicator when SSE status is error', () => {
     mockSSEHook.mockReturnValue(makeSSEState({ status: 'error' }))
     // Silence fallback poll
     mockPolledHook.mockReturnValue({ data: null, status: 'idle', lastUpdated: null, refetch: vi.fn() } as any) // eslint-disable-line @typescript-eslint/no-explicit-any
 
     render(<EventFeed />)
 
-    expect(screen.getByRole('status', { name: /stale/i })).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /polling/i })).toBeInTheDocument()
   })
 
   it('shows event count badge when events are present', () => {

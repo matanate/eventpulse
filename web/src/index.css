@@ -78,11 +78,11 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.71 0.15 200 / 50%);
-  --chart-1: oklch(0.71 0.15 200);
-  --chart-2: oklch(0.63 0.15 195);
-  --chart-3: oklch(0.54 0.14 194);
-  --chart-4: oklch(0.45 0.12 193);
-  --chart-5: oklch(0.36 0.09 192);
+  --chart-1: oklch(0.72 0.16 200);
+  --chart-2: oklch(0.73 0.16 155);
+  --chart-3: oklch(0.76 0.16 65);
+  --chart-4: oklch(0.70 0.18 295);
+  --chart-5: oklch(0.72 0.20 15);
 }
 
 @layer base {
