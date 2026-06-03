@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import type { RequestEntry } from './RequestLog'
 
+// Intentionally hardcoded: used only as the HMAC signing secret for demo webhooks.
+// The browser bundle is public, so this is not a sensitive credential.
 const DEMO_SECRET = 'eventpulse-demo-secret-key-32ch'
 
 interface WebhookPanelProps {
@@ -18,6 +20,7 @@ export function WebhookPanel({ onRequest }: WebhookPanelProps) {
   const [filterEvent, setFilterEvent] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -80,7 +83,8 @@ export function WebhookPanel({ onRequest }: WebhookPanelProps) {
         latencyMs: Date.now() - start,
       })
     } catch {
-      // silently ignore
+      setDeleteError('Failed to delete webhook — try again')
+      setTimeout(() => setDeleteError(''), 3_000)
     } finally {
       setDeleting(null)
     }
@@ -151,6 +155,10 @@ export function WebhookPanel({ onRequest }: WebhookPanelProps) {
       </div>
 
       {/* Registered webhooks list */}
+      {deleteError && (
+        <p className="text-xs text-destructive" role="alert">{deleteError}</p>
+      )}
+
       {webhooks.length > 0 ? (
         <div className="space-y-1.5">
           <p className="text-[11px] uppercase tracking-wider text-muted-foreground/50">
