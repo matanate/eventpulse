@@ -67,7 +67,7 @@ export function TopEventsChart() {
                 axisLine={false}
                 tickLine={false}
               />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip content={<ChartTooltipContent labelFormatter={(l) => formatEventName(String(l))} />} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                 {data.map((_, i) => (
                   <Cell

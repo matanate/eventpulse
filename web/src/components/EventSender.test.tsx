@@ -159,6 +159,12 @@ describe('EventSender — batch mode', () => {
     )
   })
 
+  it('increments sent count after successful batch send', async () => {
+    fireEvent.click(screen.getByRole('button', { name: /send 10 events/i }))
+
+    await waitFor(() => expect(screen.getByText('10 sent')).toBeInTheDocument())
+  })
+
   it('shows rate limit banner on 429 in batch mode', async () => {
     mockTrackBatch.mockResolvedValue({ sent: 0, failed: 10, rateLimitSeconds: 30 })
 

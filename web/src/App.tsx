@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ConnectionBanner } from './components/ConnectionBanner'
 import { EventSender } from './components/EventSender'
@@ -27,9 +27,10 @@ export default function App() {
   const [requestLog, setRequestLog] = useState<RequestEntry[]>([])
   const [isPipelining, setIsPipelining] = useState(false)
   const online = useOnlineStatus()
+  const nextIdRef = useRef(0)
 
   const logRequest = useCallback((entry: Omit<RequestEntry, 'id'>) => {
-    setRequestLog((prev) => [{ ...entry, id: Date.now() }, ...prev.slice(0, 9)])
+    setRequestLog((prev) => [{ ...entry, id: ++nextIdRef.current }, ...prev.slice(0, 9)])
   }, [])
 
   return (

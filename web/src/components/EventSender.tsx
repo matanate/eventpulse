@@ -131,6 +131,7 @@ export function EventSender({ onRequest, onSendingChange }: EventSenderProps) {
       const latencyMs = Date.now() - start
 
       if (result.sent > 0) {
+        setSentCount((c) => c + result.sent)
         setBatchResult(result.sent)
         setBatchFlash('success')
         onRequest?.({ method: 'POST', path: '/v1/events/batch', status: 202, latencyMs })
