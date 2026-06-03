@@ -120,7 +120,15 @@ export function useEventSource(
         dispatch({ type: 'error' })
         reportFailure()
 
-        if (attempt >= MAX_RECONNECTS) return
+        if (attempt >= MAX_RECONNECTS) {
+          // After exhausting fast retries, schedule one slow retry after 60 s
+          // so the feed recovers automatically if the server comes back up.
+          reconnectTimer = setTimeout(() => {
+            attempt = 0
+            connect(true)
+          }, 60_000)
+          return
+        }
 
         const delay = BASE_DELAY_MS * 2 ** attempt
         attempt++
