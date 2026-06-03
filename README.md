@@ -3,7 +3,7 @@
 A production-style Go event ingestion and analytics backend — inspired by Segment and PostHog.
 
 [![CI](https://github.com/matanate/eventpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/matanate/eventpulse/actions/workflows/ci.yml)
-![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8?logo=go)
+![Go](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go)
 [![Live demo](https://img.shields.io/badge/live%20demo-eventpulse.atedgimatan.com-6366f1)](https://eventpulse.atedgimatan.com)
 [![API docs](https://img.shields.io/badge/API%20docs-%2Fdocs-22c55e)](https://eventpulse.atedgimatan.com/docs)
 
@@ -166,7 +166,7 @@ Production-grade protections applied to the ingestion API:
 
 ## Quick Start
 
-**Prerequisites:** Docker, Go 1.22+, [golang-migrate](https://github.com/golang-migrate/migrate)
+**Prerequisites:** Docker, Go 1.25+, [golang-migrate](https://github.com/golang-migrate/migrate)
 
 ```bash
 # 1. Start infrastructure (Postgres + Redis)
