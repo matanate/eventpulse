@@ -119,7 +119,7 @@ func TestWorker_ProcessesEvent(t *testing.T) {
 	pub, consumer := newTestComponents(t, streamName)
 
 	e := &events.Event{
-		ID:         "worker-test-event-id",
+		ID:         "00000000-0000-0000-0000-000000000001",
 		ProjectID:  testProjectID,
 		Event:      "test_event",
 		UserID:     "u1",

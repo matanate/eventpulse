@@ -70,13 +70,18 @@ func runIntegration(m *testing.M) int {
 var seededProjectID string
 
 func seedProject(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	var accountID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO accounts (name) VALUES ('Schema Test Account') RETURNING id`,
+	).Scan(&accountID); err != nil {
+		return "", fmt.Errorf("insert account: %w", err)
+	}
 	var id string
-	err := pool.QueryRow(ctx, `
-		INSERT INTO projects (name, slug)
-		VALUES ('test', 'test')
-		RETURNING id`).Scan(&id)
-	if err != nil {
-		return "", err
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO projects (account_id, name) VALUES ($1, 'Schema Test Project') RETURNING id`,
+		accountID,
+	).Scan(&id); err != nil {
+		return "", fmt.Errorf("insert project: %w", err)
 	}
 	seededProjectID = id
 	return id, nil
