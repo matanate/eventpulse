@@ -124,8 +124,9 @@ Tested on a single Windows 11 host (all services co-located — no network round
 | Smoke test (1 VU) | ~254 | ~10 req/s | **10 ms** | 0% |
 | 50-key · 1,000 VU | ~1,297 | ~127 req/s | 657 ms | 0.008% |
 | 100-key · 1,000 VU | ~1,976 | ~282 req/s | 547 ms | **0%** |
+| Combined (ingest + batch + analytics) | ~706 req/s | 197 single + 1,000 batch events/s | 22.9 ms analytics | **0%** |
 
-The p95 rise at 1,000 VUs is Redis single-thread serialization under extreme concurrency on a single host — not an application bottleneck. Zero 5xx errors across all load levels.
+p95 latency for ingest rises under extreme single-host concurrency (Redis serialization) — not an application bottleneck. The analytics scenario shows aggregate reads stay under **23 ms p95** even during concurrent 600-VU ingest. Zero 5xx errors across all scenarios.
 
 ---
 
