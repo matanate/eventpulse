@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/matangi/eventpulse/internal/analytics"
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/analytics"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 func newRetentionTestServer(projectID string) *httptest.Server {
@@ -40,16 +40,16 @@ func newRetentionTestServer(projectID string) *httptest.Server {
 // Cohort layout (cohorts=4, period=day):
 //
 //	cohort today-3: ret_u1..ret_u4 (size=4)
-//	  D+1 retained: ret_u1, ret_u2, ret_u3  → rate=0.75
-//	  D+2 retained: ret_u1, ret_u2          → rate=0.50
-//	  D+3 retained: ret_u1                  → rate=0.25
+//	  D+1 retained: ret_u1, ret_u2, ret_u3  ג†’ rate=0.75
+//	  D+2 retained: ret_u1, ret_u2          ג†’ rate=0.50
+//	  D+3 retained: ret_u1                  ג†’ rate=0.25
 //
 //	cohort today-2: ret_u5, ret_u6 (size=2, first seen this day)
-//	  D+1 retained: ret_u5                  → rate=0.50
-//	  D+2 retained: ret_u5                  → rate=0.50
+//	  D+1 retained: ret_u5                  ג†’ rate=0.50
+//	  D+2 retained: ret_u5                  ג†’ rate=0.50
 //
 //	cohort today-1: ret_u7 (size=1, first seen this day)
-//	  D+1 retained: ret_u7                  → rate=1.0
+//	  D+1 retained: ret_u7                  ג†’ rate=1.0
 //
 //	cohort today:   ret_u8 (size=1, first seen this day)
 //	  D+0 only
@@ -94,7 +94,7 @@ func seedRetentionUsers(t *testing.T) {
 	}
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func TestHandleRetention_HappyPath(t *testing.T) {
 	seedRetentionUsers(t)
@@ -147,7 +147,7 @@ func TestHandleRetention_HappyPath(t *testing.T) {
 		t.Errorf("D+0 rate: want 1.0, got %.4f", d0.Rate)
 	}
 
-	// D+1: 3 users → 0.75
+	// D+1: 3 users ג†’ 0.75
 	d1 := bucketByOffset(oldestRow.Buckets, 1)
 	if d1 == nil {
 		t.Fatal("D+1 bucket missing")
@@ -159,7 +159,7 @@ func TestHandleRetention_HappyPath(t *testing.T) {
 		t.Errorf("D+1 rate: want ~0.75, got %.4f", d1.Rate)
 	}
 
-	// D+2: 2 users → 0.50
+	// D+2: 2 users ג†’ 0.50
 	d2 := bucketByOffset(oldestRow.Buckets, 2)
 	if d2 == nil {
 		t.Fatal("D+2 bucket missing")
@@ -226,7 +226,7 @@ func TestHandleRetention_DefaultParams(t *testing.T) {
 	srv := newRetentionTestServer(testProjectID)
 	defer srv.Close()
 
-	// No query params — should use defaults (period=day, cohorts=8).
+	// No query params ג€” should use defaults (period=day, cohorts=8).
 	rec := doGet(t, srv, "/v1/projects/"+testProjectID+"/retention")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
@@ -261,7 +261,7 @@ func TestHandleRetention_CohortsClamped(t *testing.T) {
 	}
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func bucketByOffset(buckets []analytics.RetentionBucket, offset int) *analytics.RetentionBucket {
 	for i := range buckets {

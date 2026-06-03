@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/matangi/eventpulse/internal/api"
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/api"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 // Handler provides HTTP endpoints for managing event schemas.

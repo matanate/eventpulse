@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/matangi/eventpulse/internal/api"
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/api"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 const (
@@ -35,7 +35,7 @@ func NewHandler(pool *pgxpool.Pool, allowHTTP bool, secretKey []byte) *Handler {
 	return &Handler{pool: pool, allowHTTP: allowHTTP, secretKey: secretKey}
 }
 
-// subscriptionResponse is the public DTO — secret is intentionally absent.
+// subscriptionResponse is the public DTO ג€” secret is intentionally absent.
 type subscriptionResponse struct {
 	ID          string    `json:"id"`
 	URL         string    `json:"url"`
@@ -155,7 +155,7 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !deleted {
-		// Return 404 for both "not found" and "belongs to another project" — avoids
+		// Return 404 for both "not found" and "belongs to another project" ג€” avoids
 		// enumeration of other projects' subscription IDs.
 		api.WriteError(w, http.StatusNotFound, "NOT_FOUND", "subscription not found")
 		return

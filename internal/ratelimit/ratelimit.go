@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/matangi/eventpulse/internal/api"
-	"github.com/matangi/eventpulse/internal/auth"
-	"github.com/matangi/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/api"
+	"github.com/matanate/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/telemetry"
 )
 
 // sliding window via a Redis sorted set; atomic via Lua so no races.
@@ -85,7 +85,7 @@ func NewLimiter(rdb *redis.Client, cfg Config) *Limiter {
 //   - FailOpen: returns allowed=true so requests pass through unthrottled.
 func (l *Limiter) Allow(ctx context.Context, keyID string) (allowed bool, retryAfter time.Duration, err error) {
 	if !l.breaker.allow() {
-		// Circuit is open — Redis is (likely) down.
+		// Circuit is open ג€” Redis is (likely) down.
 		if l.failMode == FailOpen {
 			return true, 0, nil
 		}
@@ -95,7 +95,10 @@ func (l *Limiter) Allow(ctx context.Context, keyID string) (allowed bool, retryA
 	now := time.Now()
 	nowMS := now.UnixMilli()
 	windowMS := l.window.Milliseconds()
-	member := fmt.Sprintf("%d", nowMS)
+	// Use nanoseconds as the member so concurrent requests within the same
+	// millisecond each get a distinct ZSET entry; the score (milliseconds)
+	// is still what the window range query operates on.
+	member := fmt.Sprintf("%d", now.UnixNano())
 
 	res, err := slidingWindowScript.Run(ctx, l.rdb,
 		[]string{"rl:" + keyID},
@@ -133,7 +136,7 @@ func (l *Limiter) Middleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			keyID, ok := auth.APIKeyIDFromContext(r.Context())
 			if !ok {
-				// auth middleware didn't run — pass through; handler will reject
+				// auth middleware didn't run ג€” pass through; handler will reject
 				next.ServeHTTP(w, r)
 				return
 			}

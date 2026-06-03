@@ -8,15 +8,15 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/matangi/eventpulse/internal/analytics"
-	"github.com/matangi/eventpulse/internal/docs"
-	"github.com/matangi/eventpulse/internal/events"
-	"github.com/matangi/eventpulse/internal/health"
-	"github.com/matangi/eventpulse/internal/queue"
-	"github.com/matangi/eventpulse/internal/schemas"
-	"github.com/matangi/eventpulse/internal/sse"
-	"github.com/matangi/eventpulse/internal/telemetry"
-	"github.com/matangi/eventpulse/internal/webhooks"
+	"github.com/matanate/eventpulse/internal/analytics"
+	"github.com/matanate/eventpulse/internal/docs"
+	"github.com/matanate/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/health"
+	"github.com/matanate/eventpulse/internal/queue"
+	"github.com/matanate/eventpulse/internal/schemas"
+	"github.com/matanate/eventpulse/internal/sse"
+	"github.com/matanate/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/webhooks"
 )
 
 func NewRouter(

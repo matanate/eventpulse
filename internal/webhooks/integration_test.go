@@ -20,8 +20,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/matangi/eventpulse/internal/auth"
-	"github.com/matangi/eventpulse/internal/webhooks"
+	"github.com/matanate/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/webhooks"
 )
 
 var (
@@ -78,7 +78,7 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ג”€ג”€ Tests ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func TestWebhookHandler_CreateAndList(t *testing.T) {
 	handler := newTestHandler()
@@ -235,8 +235,14 @@ func TestWebhookHandler_Unauthenticated(t *testing.T) {
 func TestEnqueueDeliveries(t *testing.T) {
 	ctx := context.Background()
 
+	// Use a fresh project so subscriptions created by other tests don't bleed in.
+	projectID, err := seedProject(ctx, testPool)
+	if err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+
 	// Seed a subscription that matches any event.
-	sub, err := webhooks.CreateSubscription(ctx, testPool, testProjectID,
+	sub, err := webhooks.CreateSubscription(ctx, testPool, projectID,
 		"http://example.com/hook", "secret-at-least-16-chars", nil)
 	if err != nil {
 		t.Fatalf("create subscription: %v", err)
@@ -245,7 +251,7 @@ func TestEnqueueDeliveries(t *testing.T) {
 
 	eventID := "00000000-0000-0000-0000-000000000001"
 	payload := []byte(`{"event":"test","user_id":"u1"}`)
-	n, err := webhooks.EnqueueDeliveries(ctx, testPool, testProjectID, "test", eventID, payload)
+	n, err := webhooks.EnqueueDeliveries(ctx, testPool, projectID, "test", eventID, payload)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -254,7 +260,7 @@ func TestEnqueueDeliveries(t *testing.T) {
 	}
 
 	// Second call with same event_id must be idempotent (dedupe index).
-	n2, err := webhooks.EnqueueDeliveries(ctx, testPool, testProjectID, "test", eventID, payload)
+	n2, err := webhooks.EnqueueDeliveries(ctx, testPool, projectID, "test", eventID, payload)
 	if err != nil {
 		t.Fatalf("enqueue (2nd): %v", err)
 	}
@@ -266,8 +272,14 @@ func TestEnqueueDeliveries(t *testing.T) {
 func TestEnqueueDeliveries_FilterEvent(t *testing.T) {
 	ctx := context.Background()
 
+	// Use a fresh project so subscriptions created by other tests don't bleed in.
+	projectID, err := seedProject(ctx, testPool)
+	if err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+
 	filterEvent := "purchase"
-	sub, err := webhooks.CreateSubscription(ctx, testPool, testProjectID,
+	sub, err := webhooks.CreateSubscription(ctx, testPool, projectID,
 		"http://example.com/filter", "secret-at-least-16-chars", &filterEvent)
 	if err != nil {
 		t.Fatalf("create subscription: %v", err)
@@ -277,7 +289,7 @@ func TestEnqueueDeliveries_FilterEvent(t *testing.T) {
 	payload := []byte(`{"event":"page_view"}`)
 
 	// Non-matching event should not produce a delivery row.
-	n, err := webhooks.EnqueueDeliveries(ctx, testPool, testProjectID, "page_view",
+	n, err := webhooks.EnqueueDeliveries(ctx, testPool, projectID, "page_view",
 		"00000000-0000-0000-0000-000000000002", payload)
 	if err != nil {
 		t.Fatalf("enqueue non-matching: %v", err)
@@ -287,7 +299,7 @@ func TestEnqueueDeliveries_FilterEvent(t *testing.T) {
 	}
 
 	// Matching event should produce a row.
-	n2, err := webhooks.EnqueueDeliveries(ctx, testPool, testProjectID, "purchase",
+	n2, err := webhooks.EnqueueDeliveries(ctx, testPool, projectID, "purchase",
 		"00000000-0000-0000-0000-000000000003", []byte(`{"event":"purchase"}`))
 	if err != nil {
 		t.Fatalf("enqueue matching: %v", err)
@@ -297,7 +309,7 @@ func TestEnqueueDeliveries_FilterEvent(t *testing.T) {
 	}
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 func newTestHandler() *webhooks.Handler {
 	return webhooks.NewHandler(testPool, true, testSecretKey)

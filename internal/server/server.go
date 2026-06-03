@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/matangi/eventpulse/internal/config"
+	"github.com/matanate/eventpulse/internal/config"
 )
 
 func New(cfg *config.Config, handler http.Handler) *http.Server {

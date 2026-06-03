@@ -17,8 +17,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/matangi/eventpulse/internal/queue"
+	"github.com/matanate/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/queue"
 )
+
+// testProjectUUID is a fixed UUID injected into request contexts — it does not
+// need to exist in the projects table because dead_letter_events.project_id has
+// no FK constraint.
+const testProjectUUID = "00000000-0000-0000-0000-000000000042"
 
 // fakeInspector is a test stub that returns a fixed pending count.
 type fakeInspector struct{ count int64 }
@@ -73,6 +79,7 @@ func runStats(m *testing.M) int {
 func TestHandleQueueStats_Empty(t *testing.T) {
 	handler := queue.NewStatsHandler(&fakeInspector{count: 0}, statsPool)
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/queue/stats", nil)
+	req = req.WithContext(auth.WithProjectID(req.Context(), testProjectUUID))
 	rec := httptest.NewRecorder()
 
 	handler.HandleQueueStats(rec, req)
@@ -99,6 +106,7 @@ func TestHandleQueueStats_Empty(t *testing.T) {
 func TestHandleQueueStats_WithPending(t *testing.T) {
 	handler := queue.NewStatsHandler(&fakeInspector{count: 7}, statsPool)
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/queue/stats", nil)
+	req = req.WithContext(auth.WithProjectID(req.Context(), testProjectUUID))
 	rec := httptest.NewRecorder()
 
 	handler.HandleQueueStats(rec, req)
@@ -121,20 +129,23 @@ func TestHandleQueueStats_WithPending(t *testing.T) {
 func TestHandleQueueStats_WithDeadLetters(t *testing.T) {
 	ctx := context.Background()
 
-	// Insert a dead-letter row.
+	// Insert a dead-letter row scoped to testProjectUUID so the handler's
+	// "WHERE project_id = $1" query matches it.
 	_, err := statsPool.Exec(ctx,
-		`INSERT INTO dead_letter_events (raw_payload, error, attempt_count)
-		 VALUES ('{"event":"test"}'::jsonb, 'test error', 3)`,
+		`INSERT INTO dead_letter_events (project_id, raw_payload, error, attempt_count)
+		 VALUES ($1, '{"event":"test"}'::jsonb, 'test error', 3)`,
+		testProjectUUID,
 	)
 	if err != nil {
 		t.Fatalf("insert dead letter: %v", err)
 	}
 	t.Cleanup(func() {
-		statsPool.Exec(ctx, `DELETE FROM dead_letter_events`) //nolint:errcheck
+		statsPool.Exec(ctx, `DELETE FROM dead_letter_events WHERE project_id = $1`, testProjectUUID) //nolint:errcheck
 	})
 
 	handler := queue.NewStatsHandler(&fakeInspector{count: 0}, statsPool)
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/queue/stats", nil)
+	req = req.WithContext(auth.WithProjectID(req.Context(), testProjectUUID))
 	rec := httptest.NewRecorder()
 
 	handler.HandleQueueStats(rec, req)

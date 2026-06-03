@@ -13,10 +13,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/matangi/eventpulse/internal/events"
-	"github.com/matangi/eventpulse/internal/queue"
-	"github.com/matangi/eventpulse/internal/telemetry"
-	"github.com/matangi/eventpulse/internal/tracing"
+	"github.com/matanate/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/queue"
+	"github.com/matanate/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/tracing"
 )
 
 // WebhookEnqueuer is satisfied by webhooks.Enqueuer. The interface is defined
@@ -114,7 +114,7 @@ func (w *Worker) handleMessage(ctx context.Context, msg queue.Message) {
 
 	e, err := decodeEvent(msg.Payload)
 	if err != nil {
-		// Unrecoverable format error — dead-letter without retry.
+		// Unrecoverable format error ג€” dead-letter without retry.
 		telemetry.EventsFailedTotal.WithLabelValues("format").Inc()
 		span.SetStatus(codes.Error, "decode payload")
 		w.deadLetter(spanCtx, msg, fmt.Errorf("decode payload: %w", err))
@@ -131,7 +131,7 @@ func (w *Worker) handleMessage(ctx context.Context, msg queue.Message) {
 	log := slog.With("trace_id", traceID, "project_id", e.ProjectID, "event", e.Event, "msg_id", msg.ID)
 
 	if err := events.Store(spanCtx, w.pool, e); err != nil {
-		// Transient error — do not ACK; redelivered after MinIdleTime.
+		// Transient error ג€” do not ACK; redelivered after MinIdleTime.
 		telemetry.EventsFailedTotal.WithLabelValues("transient").Inc()
 		span.SetStatus(codes.Error, "store event")
 		log.Error("worker: store event", "err", err)

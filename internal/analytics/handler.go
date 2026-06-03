@@ -12,8 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/matangi/eventpulse/internal/api"
-	"github.com/matangi/eventpulse/internal/auth"
+	"github.com/matanate/eventpulse/internal/api"
+	"github.com/matanate/eventpulse/internal/auth"
 )
 
 const (
@@ -158,14 +158,14 @@ func (h *Handler) HandleFunnel(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Steps) < minFunnelSteps || len(req.Steps) > maxFunnelSteps {
 		api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM",
-			fmt.Sprintf("steps must have %d–%d entries", minFunnelSteps, maxFunnelSteps))
+			fmt.Sprintf("steps must have %dג€“%d entries", minFunnelSteps, maxFunnelSteps))
 		return
 	}
 	seen := make(map[string]struct{}, len(req.Steps))
 	for _, s := range req.Steps {
 		if s == "" || len(s) > 100 {
 			api.WriteError(w, http.StatusBadRequest, "INVALID_PARAM",
-				"each step must be 1–100 characters")
+				"each step must be 1ג€“100 characters")
 			return
 		}
 		if _, dup := seen[s]; dup {

@@ -1,4 +1,4 @@
-module github.com/matangi/eventpulse
+module github.com/matanate/eventpulse
 
 go 1.25.0
 

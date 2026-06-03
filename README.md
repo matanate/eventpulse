@@ -9,6 +9,8 @@ A production-style Go event ingestion and analytics backend — inspired by Segm
 
 Client applications POST events to the ingestion API. Events are validated, rate-limited per API key, and enqueued to Redis Streams. A separate worker service consumes the queue, persists events to PostgreSQL, and updates aggregate counters. An analytics API surfaces the stored data.
 
+> **Reviewing this project?** Architecture diagram and live demo are below. For the code: start with [`internal/events/handler.go`](internal/events/handler.go) (ingestion path), [`internal/worker/worker.go`](internal/worker/worker.go) (consumer loop + crash recovery), [`internal/queue/stream.go`](internal/queue/stream.go) (Redis Streams abstraction), then [`docs/performance.md`](docs/performance.md) for load-test results.
+
 ---
 
 ## What this demonstrates
@@ -38,6 +40,9 @@ The schema registry stores a JSON Schema for any named event. In `enforce` mode,
 
 **How do you push events to a browser without polling?**
 `GET /v1/projects/{id}/stream` opens a Server-Sent Events connection backed by Redis pub/sub. After enqueue the ingestion handler publishes to `events:{projectID}` on Redis; the SSE handler subscribes and forwards each message as a `data:` frame in < 1 ms. The connection clears the server-level write deadline and sets `X-Accel-Buffering: no` so proxy layers don't buffer frames.
+
+**Why does the dashboard show events immediately if ingestion is async?**
+The ingestion handler performs an optional, non-fatal direct Postgres write _before_ `XADD` — this keeps the live feed and analytics queries fresh without blocking the HTTP response. `Store()` uses `ON CONFLICT DO NOTHING`, so when the worker later processes the same event from the stream the upsert is a no-op. Redis Streams + worker remains the durable processing path; the direct write is a best-effort optimisation for dashboard latency that degrades gracefully on any DB error.
 
 ---
 
@@ -268,6 +273,19 @@ make gen-webhook-key         # generate WEBHOOK_SECRET_KEY value
 ```
 
 **Distributed tracing**: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` to export traces. Start a local Jaeger with `make infra-obs` (included in the `observability` Docker Compose profile). Leave the variable unset for zero-overhead no-op tracing.
+
+---
+
+## Known Limitations
+
+These are real constraints, not oversights — understanding them is part of the system design story:
+
+- **Single-region** — deployed on a single Railway region; no replication, geographic failover, or read replicas.
+- **Redis as a single point of failure** — the queue, rate limiter, pub/sub, and SSE all depend on one Redis instance. A failure stops ingestion until Redis recovers; events sent during the outage are lost (no disk-based fallback).
+- **Demo API key is shared and rate-limited** — the public demo key is rate-limited to 100 req/min and is shared across all demo traffic; not suitable for load testing the live endpoint.
+- **Webhooks are at-least-once, not exactly-once** — the dispatcher retries on delivery failure. Consumers must deduplicate on `event_id` to prevent double-processing.
+- **No multi-tenant billing or admin UI** — API keys are created via `make seed`; there is no self-service registration, plan management, or customer-facing dashboard.
+- **Schema compilation is goroutine-bounded, not cancellable** — pathological JSON Schema inputs (deep `$ref` cycles) are handled with a 3-second timeout, but the compilation goroutine runs to completion after timeout; it cannot be killed mid-execution.
 
 ---
 

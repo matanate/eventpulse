@@ -7,8 +7,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/matangi/eventpulse/internal/events"
-	"github.com/matangi/eventpulse/internal/tracing"
+	"github.com/matanate/eventpulse/internal/events"
+	"github.com/matanate/eventpulse/internal/tracing"
 )
 
 // StreamPublisher implements events.Publisher using Redis Streams (XADD).

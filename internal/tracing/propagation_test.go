@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/matangi/eventpulse/internal/tracing"
+	"github.com/matanate/eventpulse/internal/tracing"
 )
 
 func TestInjectExtractRoundTrip(t *testing.T) {
@@ -33,7 +33,7 @@ func TestInjectExtractRoundTrip(t *testing.T) {
 		t.Fatalf("traceparent value too short: %q", headers["traceparent"])
 	}
 
-	// Extract into a fresh context, then start a child span — it must inherit the trace ID.
+	// Extract into a fresh context, then start a child span ג€” it must inherit the trace ID.
 	extracted := tracing.ExtractMap(context.Background(), headers)
 	_, child := tp.Tracer("test").Start(extracted, "child")
 	defer child.End()

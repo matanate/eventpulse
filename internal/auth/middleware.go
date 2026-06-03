@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/matangi/eventpulse/internal/api"
+	"github.com/matanate/eventpulse/internal/api"
 )
 
 type Middleware struct {

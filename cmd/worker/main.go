@@ -13,14 +13,14 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/matangi/eventpulse/internal/config"
-	"github.com/matangi/eventpulse/internal/db"
-	"github.com/matangi/eventpulse/internal/queue"
-	rdb "github.com/matangi/eventpulse/internal/redis"
-	"github.com/matangi/eventpulse/internal/telemetry"
-	"github.com/matangi/eventpulse/internal/tracing"
-	"github.com/matangi/eventpulse/internal/webhooks"
-	"github.com/matangi/eventpulse/internal/worker"
+	"github.com/matanate/eventpulse/internal/config"
+	"github.com/matanate/eventpulse/internal/db"
+	"github.com/matanate/eventpulse/internal/queue"
+	rdb "github.com/matanate/eventpulse/internal/redis"
+	"github.com/matanate/eventpulse/internal/telemetry"
+	"github.com/matanate/eventpulse/internal/tracing"
+	"github.com/matanate/eventpulse/internal/webhooks"
+	"github.com/matanate/eventpulse/internal/worker"
 )
 
 func main() {
@@ -76,7 +76,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// HTTP server — exposes /metrics for Prometheus and /healthz for Railway health checks.
+	// HTTP server ג€” exposes /metrics for Prometheus and /healthz for Railway health checks.
 	// Uses PORT env var (Railway convention) if set, otherwise falls back to METRICS_PORT.
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
@@ -99,7 +99,7 @@ func main() {
 		}
 	}()
 
-	// Queue lag tracker — polls XPENDING every 15s and updates the gauge.
+	// Queue lag tracker ג€” polls XPENDING every 15s and updates the gauge.
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
