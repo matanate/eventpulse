@@ -38,9 +38,17 @@ curl -o /dev/null -s -w "%{http_code}" http://localhost:8081/metrics  # → 200
 # 5. Smoke test (validate script, 1 VU 10s)
 k6 run --vus 1 --duration 10s loadtest/k6-events.js
 
-# 6. Full throughput test
+# 6. Full throughput test (ingest + batch + analytics scenarios run in parallel)
+# For analytics scenario, export a project ID first:
+export EVENTPULSE_PROJECT_ID=<project-uuid-from-seed-output>
 make loadtest
 ```
+
+The k6 script runs three concurrent scenarios:
+- **ingest**: ramp to 1,000 req/s of single-event POSTs (4-minute run)
+- **batch**: constant 20 req/s of 50-event batch POSTs (3 minutes, starts at T+30s)
+- **analytics**: 1 VU continuously hitting stats, top, and funnels endpoints (3 minutes, starts at T+30s)
+
 
 ---
 
@@ -97,6 +105,43 @@ Validates the script and gives a single-connection latency baseline.
 | k6 `p95 < 500ms` threshold | FAIL |
 
 **Interpretation**: Same pattern as 50-key run. The bottleneck is Redis rate limiter throughput under 1,000 concurrent VUs on a single machine, not the ingestion pipeline. The API itself processed 1,976 req/s with zero 5xx errors — demonstrating the Go server and PostgreSQL connection pool are not the constraint.
+
+---
+
+---
+
+## Batch Ingestion Scenario
+
+The `batch` scenario exercises `POST /v1/events/batch` at 20 req/s, each carrying 50 events = 1,000 effective events/sec.
+
+**Thresholds**: `batch_duration_ms p(95) < 1000ms`, `errors_5xx < 10`
+
+| Metric | Expected |
+|---|---|
+| Effective events/s | ~1,000 |
+| p95 batch request latency | < 1,000 ms |
+| 5xx errors | 0 |
+
+Batch requests amortize per-request overhead (auth lookup, rate limit check) across 50 events. The bottleneck shifts from Redis rate limiter throughput to PostgreSQL batch insert capacity. A single 50-event batch is processed as a pipeline of 50 XADDs in the ingestion path and a single `INSERT ... SELECT unnest(...)` in the worker.
+
+_Re-run against Railway after deploying to update this section with measured numbers._
+
+---
+
+## Analytics Scenario
+
+The `analytics` scenario runs 1 VU continuously hitting analytics endpoints under concurrent ingest load.
+
+**Thresholds**: `analytics_duration_ms p(95) < 2000ms`, `errors_5xx < 10`
+
+Endpoints exercised per iteration:
+- `GET /v1/projects/{id}/stats` — aggregate counts from `daily_event_counts`
+- `GET /v1/projects/{id}/events/top?n=10` — top events by count
+- `POST /v1/projects/{id}/funnels` — 2-step funnel with P7D window
+
+These queries read from aggregate tables (`daily_event_counts`) rather than the raw `events` table, so latency stays bounded as event volume grows. Running them under concurrent ingest validates that the worker's aggregate upserts don't create lock contention that degrades read latency.
+
+_Set `EVENTPULSE_PROJECT_ID` to run this scenario. Re-run against Railway to fill in measured numbers._
 
 ---
 
