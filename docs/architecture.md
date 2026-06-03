@@ -11,10 +11,10 @@ EventPulse is a two-service Go backend for event ingestion and analytics, inspir
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                            Clients                                  │
-│              POST /v1/events  (Bearer epk_...)                      │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │ HTTP
-                           ▼
+│   POST /v1/events  (Bearer epk_...)   EventSource /stream           │
+└──────────────────────┬──────────────────────┬───────────────────────┘
+                       │ HTTP                 │ SSE
+                       ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    ingestion-api  (:8080)                           │
 │                                                                     │
@@ -29,23 +29,35 @@ EventPulse is a two-service Go backend for event ingestion and analytics, inspir
 │   Redis ZSET sliding window  100 req/min per api_key_id             │
 │        │                            (429 + Retry-After if over)     │
 │        ▼                                                            │
+│   Schema Validator  ◄── schemas table (compile cache, LRU)         │
+│   enforce mode → 422; warn mode → metric + accept                  │
+│        │                                                            │
+│        ▼                                                            │
 │   Handler: validate payload ──► XADD "events" stream               │
+│                              └─► PUBLISH "events:{projectID}"       │
 │                                          │  (202 Accepted)          │
 │                                          │                          │
+│   SSE Handler ◄── Redis SUBSCRIBE "events:{projectID}"             │
+│   GET /v1/projects/{id}/stream  (long-lived, rate-limit exempt)    │
+│                                          │                          │
 │   Analytics Handlers ◄── PostgreSQL ◄────┘  (via worker, async)    │
-│   GET /v1/projects/{id}/stats|events|events/top|users/{uid}/events  │
+│   /stats | /events | /events/top | /funnels | /retention            │
+│                                                                     │
+│   Webhook CRUD   POST/GET /v1/webhooks   DELETE /v1/webhooks/{id}  │
+│   Schema CRUD    POST/GET/DELETE /v1/projects/{id}/schemas/{event}  │
 │                                                                     │
 │   GET /healthz   GET /readyz   GET /metrics                         │
-└────────────┬────────────────────────────────────────────────────────┘
-             │ XADD (Redis Streams)
-             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                          Redis                                      │
-│                                                                     │
-│   Stream:          "events"                                         │
-│   Consumer Group:  "workers"                                        │
-│   Rate limit keys: "rl:{api_key_id}"  (ZSET, sliding window)       │
-└────────────┬────────────────────────────────────────────────────────┘
+└────────────┬──────────────────────────────────────┬────────────────┘
+             │ XADD (Redis Streams)                 │ SSRF-guarded
+             ▼                                      ▼ HTTPS delivery
+┌────────────────────────────┐         ┌────────────────────────────┐
+│          Redis             │         │   External webhook          │
+│                            │         │   endpoints                 │
+│   Stream:  "events"        │         └────────────────────────────┘
+│   Group:   "workers"       │
+│   RL keys: "rl:{key_id}"   │
+│   PubSub:  "events:{id}"   │
+└────────────┬───────────────┘
              │ XREADGROUP BLOCK 2000ms COUNT 10
              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -55,6 +67,7 @@ EventPulse is a two-service Go backend for event ingestion and analytics, inspir
 │   ┌────────────────────────────────────────────────────────────┐   │
 │   │  XREADGROUP → decode → validate → INSERT events            │   │
 │   │                             → UPSERT daily_event_counts     │   │
+│   │                             → UPSERT daily_active_users     │   │
 │   │                             → XACK                          │   │
 │   │  on transient error: no XACK (message redelivered)          │   │
 │   │  on format error:   immediate dead-letter + XACK            │   │
@@ -63,6 +76,9 @@ EventPulse is a two-service Go backend for event ingestion and analytics, inspir
 │                                                                     │
 │   30s ticker → XAUTOCLAIM (reclaim idle messages from crashed       │
 │                            workers, check delivery count)           │
+│                                                                     │
+│   webhook dispatcher → poll webhook_subscriptions every 1s         │
+│     → deliver pending events → retry with exponential back-off     │
 └────────────┬────────────────────────────────────────────────────────┘
              │ pgx/v5 pool
              ▼
@@ -72,7 +88,10 @@ EventPulse is a two-service Go backend for event ingestion and analytics, inspir
 │   accounts, projects, api_keys                                      │
 │   events              (composite indexes on project+event+time,     │
 │                                          project+user+time)         │
-│   daily_event_counts  (upserted by worker, powers stats endpoint)   │
+│   daily_event_counts  (upserted by worker; powers stats/top)        │
+│   daily_active_users  (upserted by worker; powers retention query)  │
+│   webhook_subscriptions  (url, encrypted_secret, filter_event)      │
+│   schemas             (per project+event JSON Schema + mode)        │
 │   dead_letter_events  (unrecoverable messages for operator review)  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -115,7 +134,19 @@ Atomic sliding-window rate limiter backed by a Redis sorted set. A Lua script at
 
 ### `internal/analytics`
 
-Query functions (`Stats`, `ListEvents`, `TopEvents`, `UserEvents`) and HTTP handlers. Dynamic SQL with `$N` placeholders for optional filters. Scope check on every handler verifies URL `{projectID}` equals the auth context `project_id`.
+Query functions (`Stats`, `ListEvents`, `TopEvents`, `UserEvents`, `Funnels`, `Retention`) and HTTP handlers. Dynamic SQL with `$N` placeholders for optional filters. Scope check on every handler verifies URL `{projectID}` equals the auth context `project_id`. Funnel analysis uses dynamically generated CTEs (one per step); retention queries use the `daily_active_users` rollup.
+
+### `internal/sse`
+
+`RedisBroadcaster` publishes JSON-encoded event payloads to `events:{projectID}` on Redis pub/sub after each successful XADD. `Handler` subscribes to the same channel and writes each message as a `data:` SSE frame. The connection clears the server-level write deadline (necessary for long-lived streaming) and is exempt from per-key rate limiting.
+
+### `internal/webhooks`
+
+CRUD handlers for webhook subscriptions stored in `webhook_subscriptions`. Secrets are encrypted with AES-256-GCM before storage. Outgoing deliveries are signed with HMAC-SHA256. SSRF is prevented via `ssrf.go` (`ValidateURL` + `safeDial` — resolves hostname, checks all IPs, connects directly to avoid DNS-rebinding TOCTOU). Redirects are disabled.
+
+### `internal/schemas`
+
+Schema registry with `Store` (Postgres-backed CRUD), `SchemaValidator` (in-memory compile cache, LRU eviction), and HTTP handlers. `Compile` validates a submitted JSON Schema document with a 3-second goroutine timeout to guard against pathological inputs. On each event ingest, the validator is consulted; `enforce` mode returns 422, `warn` mode increments a Prometheus counter.
 
 ### `internal/telemetry`
 
@@ -204,3 +235,6 @@ All configuration is via environment variables. See `.env.example` for defaults.
 | `DB_MIN_CONNS` | `5` | pgxpool min connections |
 | `APP_ENV` | `development` | `development` uses text log format; anything else uses JSON |
 | `LOG_LEVEL` | `info` | `info` or `debug` |
+| `WEBHOOK_SECRET_KEY` | — | AES-256 key for encrypting webhook secrets at rest (required; generate with `make gen-webhook-key`) |
+| `WEBHOOK_HTTP_TIMEOUT` | `10s` | Per-delivery HTTP timeout for outgoing webhook calls |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP HTTP endpoint for distributed tracing (omit to disable) |

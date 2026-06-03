@@ -29,6 +29,12 @@ tags:
     description: Operational monitoring endpoints (authenticated)
   - name: docs
     description: API documentation endpoints (public)
+  - name: streaming
+    description: Server-Sent Events — real-time per-project event feed
+  - name: webhooks
+    description: Webhook subscription management
+  - name: schemas
+    description: JSON Schema registry for event property validation
 
 components:
   securitySchemes:
@@ -333,6 +339,140 @@ components:
           items:
             $ref: "#/components/schemas/RetentionRow"
           description: Cohort rows ordered newest-first (most recent cohort at index 0)
+
+    SSEEvent:
+      type: object
+      description: |
+        JSON object pushed as an SSE `data:` frame. Each event triggers one frame.
+        Connect to the stream as: `EventSource('/v1/projects/{projectID}/stream?api_key=<key>')`.
+      required: [id, event, timestamp, received_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        event:
+          type: string
+          example: page_viewed
+        user_id:
+          type: string
+          example: user_42
+        properties:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-06-03T10:00:00Z"
+        received_at:
+          type: string
+          format: date-time
+          example: "2026-06-03T10:00:00.123Z"
+
+    WebhookSubscription:
+      type: object
+      description: A webhook subscription. The secret is write-only and never returned.
+      required: [id, url, active, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "7a9f2e3b-1c4d-4e6f-8a0b-2c5d7e9f1a3b"
+        url:
+          type: string
+          format: uri
+          example: "https://example.com/webhooks/eventpulse"
+        filter_event:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: When set, only events with this exact name are delivered. Null means all events.
+          example: checkout_completed
+        active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-06-03T09:00:00Z"
+
+    WebhookCreateRequest:
+      type: object
+      required: [url, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTPS URL that will receive POST requests. HTTP only allowed in development.
+          example: "https://example.com/webhooks/eventpulse"
+        secret:
+          type: string
+          minLength: 16
+          maxLength: 256
+          description: |
+            Signing secret. EventPulse uses this to produce an HMAC-SHA256 signature
+            sent in `X-EventPulse-Signature: sha256=<hex>`. The secret is stored
+            encrypted (AES-256-GCM) and is never returned in responses.
+          example: "my-webhook-signing-secret"
+        filter_event:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: Optional event name filter. Omit or set null to receive all events.
+          example: checkout_completed
+
+    SchemaRegistryEntry:
+      type: object
+      description: A registered JSON Schema for a named event type.
+      required: [id, event_name, schema, mode, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3f8a1b2c-9d4e-5f6a-7b8c-9d0e1f2a3b4c"
+        event_name:
+          type: string
+          example: checkout_completed
+        schema:
+          type: object
+          description: A valid JSON Schema (draft-07 / 2020-12)
+          example:
+            type: object
+            required: [amount, currency]
+            properties:
+              amount: { type: number }
+              currency: { type: string, maxLength: 3 }
+        mode:
+          type: string
+          enum: [enforce, warn]
+          description: |
+            `enforce` — reject events whose properties violate the schema (422).
+            `warn` — accept the event but emit a `schema_violation` metric.
+          example: enforce
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SchemaUpsertRequest:
+      type: object
+      required: [schema]
+      properties:
+        schema:
+          type: object
+          description: A valid JSON Schema. Submitted as an embedded JSON object.
+          example:
+            type: object
+            required: [amount]
+            properties:
+              amount: { type: number }
+        mode:
+          type: string
+          enum: [enforce, warn]
+          default: warn
+          description: Validation mode. Defaults to `warn` if omitted.
 
 paths:
   /healthz:
@@ -935,6 +1075,373 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EventsListResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/stream:
+    get:
+      tags: [streaming]
+      summary: Subscribe to a real-time event stream (SSE)
+      description: |
+        Opens a long-lived Server-Sent Events connection. Each ingested event
+        is pushed as a `data: <json>` frame within ~1 ms of acceptance.
+
+        **Authentication**: Because the `EventSource` browser API cannot set
+        custom headers, pass the API key as a query parameter:
+        `?api_key=epk_...`. The Authorization header is also accepted.
+
+        The server sends a `: connected` comment frame immediately on connect.
+        Clients should reconnect automatically on disconnect (browsers do this
+        natively; use `retry:` field or exponential back-off elsewhere).
+
+        Rate limiting is not applied to this endpoint — the connection is
+        long-lived and counted as a single authenticated request.
+      operationId: streamEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+          description: API key alternative for browsers using EventSource (which cannot set headers)
+      responses:
+        "200":
+          description: SSE stream — connection stays open; each frame is one JSON event
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/SSEEvent"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Project ID does not match the authenticated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks:
+    post:
+      tags: [webhooks]
+      summary: Create a webhook subscription
+      description: |
+        Registers a new webhook endpoint that will receive POST requests whenever
+        events are ingested for the project.
+
+        Each delivery is signed with `X-EventPulse-Signature: sha256=<hex>` using
+        HMAC-SHA256 over the raw JSON body and the secret provided at creation time.
+
+        The secret is stored encrypted (AES-256-GCM) and is **never** returned in
+        any response — store it securely at subscription time.
+
+        Delivery is best-effort with exponential back-off. Failed deliveries are
+        retried; after exhaustion the event is logged but not requeued.
+      operationId: createWebhook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookCreateRequest"
+            example:
+              url: "https://example.com/webhooks/eventpulse"
+              secret: "my-signing-secret-at-least-16-chars"
+              filter_event: checkout_completed
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSubscription"
+        "400":
+          description: Validation error (invalid URL, secret too short, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags: [webhooks]
+      summary: List webhook subscriptions
+      description: Returns all webhook subscriptions registered for the authenticated project.
+      operationId: listWebhooks
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of webhook subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookSubscription"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/{id}:
+    delete:
+      tags: [webhooks]
+      summary: Delete a webhook subscription
+      description: |
+        Permanently removes the webhook subscription. Returns 404 for both
+        "not found" and "belongs to another project" to prevent subscription ID
+        enumeration across projects.
+      operationId: deleteWebhook
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Webhook subscription UUID
+      responses:
+        "204":
+          description: Subscription deleted
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found or belongs to another project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/schemas:
+    get:
+      tags: [schemas]
+      summary: List registered schemas
+      description: Returns all event schemas registered for the project.
+      operationId: listSchemas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of registered schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchemaRegistryEntry"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{projectID}/schemas/{event}:
+    post:
+      tags: [schemas]
+      summary: Register or update an event schema
+      description: |
+        Creates or replaces the JSON Schema for the named event. The submitted
+        document must be a valid JSON Schema (any draft supported by
+        `santhosh-tekuri/jsonschema`).
+
+        In `enforce` mode, subsequent `POST /v1/events` calls with this event
+        name are rejected with 422 if `properties` violates the schema.
+        In `warn` mode (default) the event is accepted and a metric is emitted.
+
+        Schema compilation runs with a 3-second timeout — pathological schemas
+        with deep `$ref` cycles return 408.
+      operationId: upsertSchema
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: event
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 255
+          description: Event name (e.g. `checkout_completed`)
+          example: checkout_completed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchemaUpsertRequest"
+            example:
+              schema:
+                type: object
+                required: [amount, currency]
+                properties:
+                  amount: { type: number }
+                  currency: { type: string, maxLength: 3 }
+              mode: enforce
+      responses:
+        "201":
+          description: Schema created or replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchemaRegistryEntry"
+        "400":
+          description: Invalid JSON Schema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Schema compilation timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags: [schemas]
+      summary: Get a schema by event name
+      description: Returns the registered schema for the named event, or 404 if none exists.
+      operationId: getSchema
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: event
+          in: path
+          required: true
+          schema:
+            type: string
+          example: checkout_completed
+      responses:
+        "200":
+          description: Registered schema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchemaRegistryEntry"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No schema registered for this event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [schemas]
+      summary: Delete a schema
+      description: |
+        Removes the schema for the named event. Subsequent events with this name
+        will no longer be validated. The compile cache is invalidated immediately.
+      operationId: deleteSchema
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: event
+          in: path
+          required: true
+          schema:
+            type: string
+          example: checkout_completed
+      responses:
+        "204":
+          description: Schema deleted (or never existed — idempotent)
         "401":
           description: Missing or invalid API key
           content:

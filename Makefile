@@ -3,7 +3,7 @@ GO     := go
 BIN    := bin
 
 .PHONY: run-api run-worker infra-up infra-down infra-obs migrate migrate-down \
-        test test-integration lint build clean seed seed-demo loadtest
+        test test-integration lint build clean seed seed-demo loadtest gen-webhook-key
 
 ## ── Infrastructure ───────────────────────────────────────────────────────────
 
@@ -78,6 +78,11 @@ loadtest:
 	@test -n "$$EVENTPULSE_API_KEYS" || \
 		(echo "Error: EVENTPULSE_API_KEYS not set. Run: make seed SEED_COUNT=50" && exit 1)
 	k6 run loadtest/k6-events.js
+
+## ── Secrets ──────────────────────────────────────────────────────────────────
+
+gen-webhook-key:
+	openssl rand -hex 32
 
 ## ── Clean ────────────────────────────────────────────────────────────────────
 
