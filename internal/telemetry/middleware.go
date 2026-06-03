@@ -21,6 +21,15 @@ func (sr *statusRecorder) WriteHeader(status int) {
 	sr.ResponseWriter.WriteHeader(status)
 }
 
+// Flush delegates to the underlying ResponseWriter if it implements http.Flusher.
+// Required for SSE: the SSE handler asserts w.(http.Flusher) — without this the
+// assertion fails and every stream request returns 500 "streaming not supported".
+func (sr *statusRecorder) Flush() {
+	if f, ok := sr.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // RequestLogger logs each completed request at INFO with request_id, method, path, status, and duration.
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
