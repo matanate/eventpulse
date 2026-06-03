@@ -30,6 +30,15 @@ Every integration test spins up real Postgres and Redis instances via `testconta
 **How do you keep the HTTP path fast when storage writes are variable-latency?**
 `POST /v1/events` calls `XADD` on a Redis Stream and returns 202 immediately. The worker `XREADGROUP`s at its own pace as a separate process. Ingestion latency is bounded by Redis (~1 ms), not Postgres.
 
+**How do you protect outgoing webhook delivery from SSRF?**
+Webhook URLs are validated before storage and again at delivery via a custom `safeDial` that resolves the hostname, checks every returned IP against RFC1918/loopback/CGNAT/ULA blocklists, and connects directly to the resolved IP — eliminating the DNS-rebinding TOCTOU window. Redirects are disabled. The signing secret is stored as AES-256-GCM ciphertext; deliveries carry `X-EventPulse-Signature: sha256=<hmac>`.
+
+**How do you enforce event property contracts without breaking existing clients?**
+The schema registry stores a JSON Schema for any named event. In `enforce` mode, events whose `properties` violate the schema are rejected with 422 and field-level errors. In `warn` mode the event is accepted and a `schema_violation` counter increments. Teams promote from warn → enforce once all clients send conforming payloads — gradual rollout, no big-bang cutover.
+
+**How do you push events to a browser without polling?**
+`GET /v1/projects/{id}/stream` opens a Server-Sent Events connection backed by Redis pub/sub. After enqueue the ingestion handler publishes to `events:{projectID}` on Redis; the SSE handler subscribes and forwards each message as a `data:` frame in < 1 ms. The connection clears the server-level write deadline and sets `X-Accel-Buffering: no` so proxy layers don't buffer frames.
+
 ---
 
 ## Try It Live
@@ -71,28 +80,35 @@ curl $DEMO_URL/v1/projects/$PROJECT_ID/stats \
 
 ```mermaid
 flowchart TD
+    Browser["Browser\nEventSource"] -->|SSE| API
     Client["Client App\nPOST /v1/events\nBearer epk_..."] -->|HTTP| API
 
     subgraph API["ingestion-api :8080"]
         Auth["Auth middleware\nSHA-256 → api_keys lookup"] --> RL["Rate limiter\n100 req/min per key · Lua ZSET"]
-        RL --> EH["Event handler\nvalidate → enqueue → 202"]
-        EH --> AH["Analytics handlers\n/stats · /events · /events/top"]
+        RL --> EH["Event handler\nschema validate → enqueue → 202"]
+        EH --> AH["Analytics handlers\n/stats · /funnels · /retention"]
+        EH --> SSE["SSE handler\n/stream · Redis pub/sub"]
+        EH --> WH["Webhooks CRUD + dispatcher\nSSRF-guarded · AES-256-GCM secret"]
+        AH --> SCH["Schema registry\nJSON Schema per event · warn/enforce"]
     end
 
-    EH -->|XADD| Redis[("Redis\nStream: events\nZSETs: rl:{api_key_id}")]
+    EH -->|XADD| Redis[("Redis\nStream: events\nZSETs: rl:{api_key_id}\nPub/Sub: events:{id}")]
     Redis -->|XREADGROUP| Worker
+    Redis -->|Subscribe| SSE
 
     subgraph Worker["worker :8081"]
         WLoop["5 goroutines\nXREADGROUP → validate\n→ INSERT → XACK"]
         Reclaim["30 s ticker\nXAUTOCLAIM idle messages\n→ dead-letter after 3 retries"]
     end
 
-    Worker -->|pgx/v5 pool| PG[("PostgreSQL\nevents · received_at\ndaily_event_counts\ndead_letter_events")]
+    Worker -->|pgx/v5 pool| PG[("PostgreSQL\nevents · daily_event_counts\ndaily_active_users\nwebhook_subscriptions\nschemas · dead_letter_events")]
     AH -->|SELECT| PG
+    WH -->|SSRF-guarded HTTPS| Ext["External\nwebhook endpoints"]
 
     Prom["Prometheus :9090"] -->|scrape /metrics| API
     Prom -->|scrape :8081/metrics| Worker
     Prom --> Grafana["Grafana :3000\n7-panel dashboard"]
+    OTEL["OTEL Collector\n(optional)"] -.->|OTLP traces| API
 ```
 
 ---
@@ -108,8 +124,9 @@ Tested on a single Windows 11 host (all services co-located — no network round
 | Smoke test (1 VU) | ~254 | ~10 req/s | **10 ms** | 0% |
 | 50-key · 1,000 VU | ~1,297 | ~127 req/s | 657 ms | 0.008% |
 | 100-key · 1,000 VU | ~1,976 | ~282 req/s | 547 ms | **0%** |
+| Combined (ingest + batch + analytics) | ~706 req/s | 197 single + 1,000 batch events/s | 22.9 ms analytics | **0%** |
 
-The p95 rise at 1,000 VUs is Redis single-thread serialization under extreme concurrency on a single host — not an application bottleneck. Zero 5xx errors across all load levels.
+p95 latency for ingest rises under extreme single-host concurrency (Redis serialization) — not an application bottleneck. The analytics scenario shows aggregate reads stay under **23 ms p95** even during concurrent 600-VU ingest. Zero 5xx errors across all scenarios.
 
 ---
 
@@ -136,6 +153,9 @@ Production-grade protections applied to the ingestion API:
 | **Timestamp bounds** | Event `timestamp` must be within 24 h past / 1 min future; rejects pre-dated or far-future events |
 | **Health endpoint safety** | `/readyz` returns `"unavailable"` for failed dependencies — raw driver error strings never reach the public response; logged server-side via `slog.Warn` |
 | **CORS allowlist** | Exact origin allowlist (`eventpulse.pages.dev`, `eventpulse.atedgimatan.com`, `localhost:5173`) — no wildcard subdomains |
+| **Webhook SSRF prevention** | Custom `safeDial` resolves webhook URLs, blocks all RFC1918/loopback/CGNAT/ULA IPs, and connects directly to the resolved IP — eliminates the DNS-rebinding TOCTOU window |
+| **Webhook secret encryption** | Signing secrets stored as AES-256-GCM ciphertext in Postgres — plaintext never persisted |
+| **Webhook delivery signing** | Each delivery carries `X-EventPulse-Signature: sha256=<hmac>` over the raw request body so receivers can verify authenticity |
 
 ---
 
@@ -147,8 +167,9 @@ Production-grade protections applied to the ingestion API:
 # 1. Start infrastructure (Postgres + Redis)
 make infra-up
 
-# 2. Copy env and apply migrations
+# 2. Copy env, set required secret, apply migrations
 cp .env.example .env
+# Edit .env: set WEBHOOK_SECRET_KEY=$(make gen-webhook-key)
 make migrate
 
 # 3. Generate an API key (prints the raw epk_... value)
@@ -177,6 +198,33 @@ make infra-obs   # Prometheus :9090 + Grafana :3000
 
 ---
 
+## TypeScript SDK
+
+`sdk/` contains a browser/Node-compatible TypeScript client with auto-batching, idempotency, and retry built in.
+
+```typescript
+import { EventPulseClient } from './sdk/src'
+
+const client = new EventPulseClient({
+  endpoint: 'https://ingestion-api-production-137c.up.railway.app',
+  apiKey: 'epk_...',
+  flushIntervalMs: 1_000,   // auto-flush every second
+  maxQueueSize: 100,        // flush early when queue fills
+})
+
+// track() queues with auto-generated idempotency key
+client.track('page_viewed', 'user_42', { page: '/pricing' })
+client.identify('user_42', { plan: 'pro' })
+
+// immediate send, bypasses the queue
+await client.flush()
+client.destroy() // stop the timer on unmount / page unload
+```
+
+`track()` enqueues events locally and the `AutoBatcher` drains them via `POST /v1/events/batch` on a configurable interval. Each event gets a `crypto.randomUUID()` idempotency key automatically — retried network calls never produce duplicates.
+
+---
+
 ## API Endpoints
 
 All authenticated endpoints require `Authorization: Bearer epk_...`. See [docs/api.md](docs/api.md) for full request/response examples and error codes, or open the [interactive API reference](https://eventpulse.atedgimatan.com/docs).
@@ -193,6 +241,16 @@ All authenticated endpoints require `Authorization: Bearer epk_...`. See [docs/a
 | `GET` | `/v1/projects/{id}/events` | ✓ | Paginated event list (filter by name, user, date) |
 | `GET` | `/v1/projects/{id}/events/top` | ✓ | Top N event names by count |
 | `GET` | `/v1/projects/{id}/users/{uid}/events` | ✓ | All events for a user |
+| `POST` | `/v1/projects/{id}/funnels` | ✓ | Compute step-to-step conversion funnel |
+| `GET` | `/v1/projects/{id}/retention` | ✓ | Triangular cohort-retention matrix |
+| `GET` | `/v1/projects/{id}/stream` | ✓ | SSE event feed (EventSource-compatible) |
+| `POST` | `/v1/webhooks` | ✓ | Register a webhook subscription |
+| `GET` | `/v1/webhooks` | ✓ | List webhook subscriptions |
+| `DELETE` | `/v1/webhooks/{id}` | ✓ | Delete a webhook subscription |
+| `GET` | `/v1/projects/{id}/schemas` | ✓ | List registered JSON schemas |
+| `POST` | `/v1/projects/{id}/schemas/{event}` | ✓ | Register or update an event schema |
+| `GET` | `/v1/projects/{id}/schemas/{event}` | ✓ | Get schema for an event |
+| `DELETE` | `/v1/projects/{id}/schemas/{event}` | ✓ | Delete an event schema |
 | `GET` | `/v1/admin/queue/stats` | ✓ | Live queue depth, consumer lag, dead-letter count |
 
 ---
@@ -206,7 +264,10 @@ make lint                    # golangci-lint
 make build                   # compile both binaries to bin/
 make seed SEED_COUNT=50      # generate 50 API keys for load testing
 make loadtest                # k6 load test (requires EVENTPULSE_API_KEYS)
+make gen-webhook-key         # generate WEBHOOK_SECRET_KEY value
 ```
+
+**Distributed tracing**: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` to export traces. Start a local Jaeger with `make infra-obs` (included in the `observability` Docker Compose profile). Leave the variable unset for zero-overhead no-op tracing.
 
 ---
 

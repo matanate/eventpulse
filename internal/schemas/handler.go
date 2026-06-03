@@ -1,6 +1,7 @@
 package schemas
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -79,9 +80,19 @@ func (h *Handler) HandleUpsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the submitted document is itself a valid JSON Schema.
-	if err := Compile(req.Schema); err != nil {
-		api.WriteError(w, http.StatusBadRequest, "INVALID_SCHEMA", err.Error())
+	// Guard against pathological schemas ($ref cycles) that could block indefinitely.
+	compileCtx, compileCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer compileCancel()
+	compileCh := make(chan error, 1)
+	go func() { compileCh <- Compile(req.Schema) }()
+	select {
+	case err := <-compileCh:
+		if err != nil {
+			api.WriteError(w, http.StatusBadRequest, "INVALID_SCHEMA", err.Error())
+			return
+		}
+	case <-compileCtx.Done():
+		api.WriteError(w, http.StatusRequestTimeout, "SCHEMA_TIMEOUT", "schema compilation timed out")
 		return
 	}
 

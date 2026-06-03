@@ -259,3 +259,83 @@ W3C `traceparent` injected as a top-level field in the Redis Stream entry alongs
 **Sampling**
 
 `AlwaysSample` is used because this is a portfolio/demo system where complete trace coverage is more valuable than volume reduction. A production deployment with significant traffic would switch to a `ParentBased(TraceIDRatioBased(0.01))` sampler and move the sampling decision upstream to the API gateway.
+
+---
+
+## 9. Webhook Delivery: At-Least-Once vs. Exactly-Once
+
+**Context**
+
+Webhook delivery is inherently unreliable — receivers can be down, slow, or return transient errors. The question is how many times to retry and what guarantees to provide.
+
+**Options considered**
+
+| Option | Guarantee | Complexity | Notes |
+|---|---|---|---|
+| Fire-and-forget | None | Minimal | Drops events on any failure |
+| At-most-once | No duplicates, may miss | Low | Simple but unreliable |
+| At-least-once with retries (chosen) | No drops, possible duplicates | Medium | Standard for webhooks |
+| Exactly-once | No drops, no duplicates | Very high | Requires distributed two-phase protocol |
+
+**Choice: at-least-once with idempotency guidance**
+
+The webhook dispatcher retries failed deliveries with exponential back-off. Receivers must be idempotent — the `X-EventPulse-Signature` includes a delivery ID that receivers can use for deduplication. The `Idempotency-Key` on the original event flows through as `X-EventPulse-Event-ID` in the webhook payload.
+
+**Cost / mitigation**
+
+- Receivers may see the same event more than once during retries. This is documented behaviour — receivers should deduplicate on the event ID.
+- A delivery that times out at the receiver side but completed may trigger a retry. The signature includes the event ID so idempotent receivers handle this transparently.
+- Webhook delivery runs in a separate goroutine pool inside the worker, decoupled from the main Redis Streams consumer loop — slow or failing receivers do not block event persistence.
+
+---
+
+## 10. Schema Registry: Warn vs. Enforce Mode
+
+**Context**
+
+When a new event schema is registered, existing clients may not yet send conforming payloads. Hard-rejecting events immediately would break production clients and create a migration cliff.
+
+**Options considered**
+
+| Option | Client impact | Observability |
+|---|---|---|
+| Enforce immediately | Breaking — existing clients see 422s | High |
+| Warn only | Non-breaking — all events accepted | Medium (metric only) |
+| Two-mode (warn → enforce) chosen | Non-breaking rollout | High |
+
+**Choice: two-mode registry**
+
+`warn` mode accepts the event and increments a `schema_violations_total{event="...",project="..."}` Prometheus counter. Teams can watch the counter, fix clients, then flip the schema to `enforce` mode via a single API call. This mirrors the standard feature-flag pattern — gradual rollout, instant rollback.
+
+**Cost / mitigation**
+
+- A `warn`-mode schema provides no protection — non-conforming data enters the DB. This is intentional: it is a migration tool, not a security control.
+- Schema compilation runs with a 3-second goroutine timeout to guard against pathological JSON Schemas (deep `$ref` cycles). A compile timeout returns 408 so callers know what happened.
+- The validator maintains an in-process compile cache (LRU). A cache invalidation call is made after each upsert/delete so subsequent ingestions immediately see the updated schema.
+
+---
+
+## 11. SSE vs. Polling for Real-Time Updates
+
+**Context**
+
+The React dashboard needs to display new events as they are ingested. Options range from client polling to full-duplex WebSockets.
+
+**Options considered**
+
+| Option | Server cost | Client complexity | Push latency |
+|---|---|---|---|
+| Client polling (e.g. every 1s) | Low per-request overhead, but × N clients × freq | Simple | ≤ poll interval |
+| WebSockets | Per-connection goroutine + message loop | Moderate (upgrade, reconnect) | < 1 ms |
+| Server-Sent Events (chosen) | Per-connection goroutine + Redis subscription | Simple (`EventSource` built-in) | < 1 ms |
+| Long-polling | Moderate — connection held until event or timeout | Moderate | ≤ timeout |
+
+**Choice: SSE over Redis pub/sub**
+
+SSE requires only a standard HTTP GET and the built-in `EventSource` browser API — no upgrade negotiation, no client-side reconnect logic (the browser reconnects automatically). The server cost is one goroutine + one Redis subscription per connected client. In a demo environment with a handful of clients, this is negligible.
+
+**Cost / mitigation**
+
+- Each open SSE connection holds a goroutine and a Redis pub/sub subscription. At thousands of concurrent clients, this becomes significant. The standard mitigation is an SSE gateway layer that fans out one Redis subscription to many client connections (e.g. `centrifugo`, `mercure`).
+- The server-level `WriteTimeout` is cleared for SSE connections to prevent severing the stream on the configured timeout interval. This means slow or misbehaving clients can hold a goroutine indefinitely; a connection-level idle timeout (not implemented in v1) would bound this.
+- Backpressure: the `go-redis` pub/sub channel is buffered at 64 messages. If the client cannot consume fast enough, messages are dropped by go-redis before the SSE handler sees them. For a dashboard feed, missing a few events during a spike is acceptable; for reliable delivery, use the REST events endpoint instead.

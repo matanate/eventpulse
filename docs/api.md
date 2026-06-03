@@ -363,6 +363,281 @@ curl "http://localhost:8080/v1/projects/your-project-id/users/user-42/events?lim
 
 ---
 
+### POST /v1/projects/{projectID}/funnels
+
+Computes a step-to-step conversion funnel. Each step must occur within the specified window after the previous step. Events with a null `user_id` are excluded.
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `steps` | string[] | Yes | Ordered event names (2–8 items) |
+| `window` | string | Yes | ISO 8601 duration, e.g. `P7D` (max P90D) |
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8080/v1/projects/your-project-id/funnels \
+  -H "Authorization: Bearer epk_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"steps": ["page_viewed", "checkout_started", "purchase_completed"], "window": "P7D"}'
+```
+
+```json
+200 OK
+{
+  "steps": [
+    { "event": "page_viewed",        "entered": 1000, "converted": 400, "dropped": 600, "conversion_rate": 0.4 },
+    { "event": "checkout_started",   "entered":  400, "converted": 120, "dropped": 280, "conversion_rate": 0.3 },
+    { "event": "purchase_completed", "entered":  120, "converted":   0, "dropped":   0, "conversion_rate": 0.0 }
+  ],
+  "window": "P7D",
+  "overall_conversion_rate": 0.12
+}
+```
+
+---
+
+### GET /v1/projects/{projectID}/retention
+
+Returns a triangular cohort-retention matrix. Users are grouped into daily cohorts by their first appearance within the observation window.
+
+**Query parameters**
+
+| Param | Default | Description |
+|---|---|---|
+| `period` | `day` | Cohort granularity (only `day` supported) |
+| `cohorts` | `8` | Number of cohort days to include (max 12) |
+
+**Example**
+
+```bash
+curl "http://localhost:8080/v1/projects/your-project-id/retention?cohorts=3" \
+  -H "Authorization: Bearer epk_abc123..."
+```
+
+```json
+200 OK
+{
+  "period": "day",
+  "cohorts": 3,
+  "rows": [
+    {
+      "cohort_date": "2026-06-03",
+      "cohort_size": 50,
+      "buckets": [
+        { "offset": 0, "count": 50, "rate": 1.0 }
+      ]
+    },
+    {
+      "cohort_date": "2026-06-02",
+      "cohort_size": 80,
+      "buckets": [
+        { "offset": 0, "count": 80,  "rate": 1.0  },
+        { "offset": 1, "count": 36,  "rate": 0.45 }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Streaming Endpoint
+
+### GET /v1/projects/{projectID}/stream
+
+Opens a Server-Sent Events connection. Each event ingested for the project is pushed as a `data: <json>` frame within milliseconds.
+
+**Authentication**: Because the `EventSource` browser API cannot set custom headers, pass the API key as a query parameter: `?api_key=epk_...`. The `Authorization` header is also accepted (non-browser clients).
+
+The server sends a `: connected` comment frame immediately on connect.
+
+**Example (browser)**
+
+```javascript
+const stream = new EventSource(
+  `https://ingestion-api-production-137c.up.railway.app/v1/projects/${projectId}/stream?api_key=${apiKey}`
+)
+
+stream.onmessage = (e) => {
+  const event = JSON.parse(e.data)
+  console.log(event.event, event.user_id, event.timestamp)
+}
+```
+
+**Event frame shape**
+
+```json
+{
+  "id": "018f5c7b-...",
+  "event": "page_viewed",
+  "user_id": "user_42",
+  "properties": { "page": "/pricing" },
+  "timestamp": "2026-06-03T10:00:00Z",
+  "received_at": "2026-06-03T10:00:00.123Z"
+}
+```
+
+---
+
+## Webhook Endpoints
+
+Webhooks deliver events to an external HTTPS endpoint as they are ingested. Deliveries are signed with `X-EventPulse-Signature: sha256=<hmac>` using the secret provided at subscription creation time. The secret is stored encrypted and is never returned.
+
+### POST /v1/webhooks
+
+Register a new webhook subscription.
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | Yes | HTTPS endpoint URL |
+| `secret` | string | Yes | Signing secret (16–256 chars) |
+| `filter_event` | string | No | Deliver only this event name; omit for all events |
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8080/v1/webhooks \
+  -H "Authorization: Bearer epk_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks/eventpulse",
+    "secret": "my-signing-secret-at-least-16-chars",
+    "filter_event": "purchase_completed"
+  }'
+```
+
+```json
+201 Created
+{
+  "id": "7a9f2e3b-...",
+  "url": "https://example.com/webhooks/eventpulse",
+  "filter_event": "purchase_completed",
+  "active": true,
+  "created_at": "2026-06-03T10:00:00Z"
+}
+```
+
+**Verifying deliveries**
+
+```javascript
+import { createHmac } from 'crypto'
+
+function verifyWebhook(rawBody, signature, secret) {
+  const expected = 'sha256=' + createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex')
+  return expected === signature
+}
+```
+
+---
+
+### GET /v1/webhooks
+
+List all subscriptions for the authenticated project.
+
+```bash
+curl http://localhost:8080/v1/webhooks \
+  -H "Authorization: Bearer epk_abc123..."
+```
+
+---
+
+### DELETE /v1/webhooks/{id}
+
+Delete a subscription. Returns `404` for both "not found" and "belongs to another project" to prevent subscription ID enumeration.
+
+```bash
+curl -X DELETE http://localhost:8080/v1/webhooks/7a9f2e3b-... \
+  -H "Authorization: Bearer epk_abc123..."
+# → 204 No Content
+```
+
+---
+
+## Schema Registry Endpoints
+
+Register JSON Schemas to validate event `properties` at ingestion time. Two modes: `enforce` (reject invalid events with 422) and `warn` (accept but emit a `schema_violation` metric, default).
+
+### POST /v1/projects/{projectID}/schemas/{event}
+
+Register or replace the schema for an event name. The body must contain a valid JSON Schema.
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | object | Yes | A valid JSON Schema |
+| `mode` | string | No | `"enforce"` or `"warn"` (default: `"warn"`) |
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8080/v1/projects/your-project-id/schemas/purchase_completed \
+  -H "Authorization: Bearer epk_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema": {
+      "type": "object",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 3 }
+      }
+    },
+    "mode": "enforce"
+  }'
+```
+
+```json
+201 Created
+{
+  "id": "3f8a1b2c-...",
+  "event_name": "purchase_completed",
+  "schema": { "type": "object", "required": ["amount", "currency"], ... },
+  "mode": "enforce",
+  "created_at": "2026-06-03T10:00:00Z",
+  "updated_at": "2026-06-03T10:00:00Z"
+}
+```
+
+Once registered, any `POST /v1/events` with `event: "purchase_completed"` and missing `amount` or `currency` will return:
+
+```json
+422 Unprocessable Entity
+{
+  "error": "schema validation failed",
+  "code": "SCHEMA_VIOLATION",
+  "details": [
+    { "field": "properties.amount", "message": "missing required property" }
+  ]
+}
+```
+
+---
+
+### GET /v1/projects/{projectID}/schemas/{event}
+
+Returns the registered schema, or 404 if none exists.
+
+---
+
+### DELETE /v1/projects/{projectID}/schemas/{event}
+
+Removes the schema. Subsequent events will pass through without validation.
+
+---
+
+### GET /v1/projects/{projectID}/schemas
+
+Lists all registered schemas for the project.
+
+---
+
 ## Rate Limiting
 
 Rate limits apply per API key, not per IP or project.
