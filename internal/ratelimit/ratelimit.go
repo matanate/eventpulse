@@ -95,7 +95,10 @@ func (l *Limiter) Allow(ctx context.Context, keyID string) (allowed bool, retryA
 	now := time.Now()
 	nowMS := now.UnixMilli()
 	windowMS := l.window.Milliseconds()
-	member := fmt.Sprintf("%d", nowMS)
+	// Use nanoseconds as the member so concurrent requests within the same
+	// millisecond each get a distinct ZSET entry; the score (milliseconds)
+	// is still what the window range query operates on.
+	member := fmt.Sprintf("%d", now.UnixNano())
 
 	res, err := slidingWindowScript.Run(ctx, l.rdb,
 		[]string{"rl:" + keyID},
