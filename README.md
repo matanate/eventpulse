@@ -4,6 +4,7 @@ A production-style Go event ingestion and analytics backend — inspired by Segm
 
 [![CI](https://github.com/matanate/eventpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/matanate/eventpulse/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Live demo](https://img.shields.io/badge/live%20demo-eventpulse.atedgimatan.com-6366f1)](https://eventpulse.atedgimatan.com)
 [![API docs](https://img.shields.io/badge/API%20docs-%2Fdocs-22c55e)](https://eventpulse.atedgimatan.com/docs)
 
